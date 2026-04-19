@@ -190,6 +190,8 @@ fun VideoPlayerScreen(
                         javaScriptEnabled = true
                         domStorageEnabled = true
                         databaseEnabled = true
+                        setGeolocationEnabled(true)
+                        
                         allowFileAccess = true
                         allowContentAccess = true
                         allowFileAccessFromFileURLs = true
@@ -200,10 +202,15 @@ fun VideoPlayerScreen(
                         userAgentString = DESKTOP_CHROME_UA
                         
                         setSupportMultipleWindows(true)
-                        javaScriptCanOpenWindowsAutomatically = false
+                        javaScriptCanOpenWindowsAutomatically = true
+                        
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            safeBrowsingEnabled = false
+                        }
                         
                         mediaPlaybackRequiresUserGesture = false
-                        builtInZoomControls = false
+                        setSupportZoom(true)
+                        builtInZoomControls = true
                         displayZoomControls = false
                         cacheMode = WebSettings.LOAD_DEFAULT
                     }
@@ -275,17 +282,8 @@ fun VideoPlayerScreen(
 
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                            val url = request?.url?.toString() ?: ""
-                            
-                            if (viewModel.mediaType == "live" || viewModel.mediaType == "sports") {
-                                return false
-                            }
-                            
-                            val isAllowed = WHITELIST_DOMAINS.any { domain -> 
-                                url.contains(domain, ignoreCase = true) 
-                            } || url.contains("videasy.net") || url.contains("googlevideo")
-                            
-                            if (!isAllowed) return true 
+                            // FULL FREEDOM: No longer blocking domains for non-live/sports content
+                            // This allows portals to redirect freely across different domains
                             return false
                         }
 
