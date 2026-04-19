@@ -70,14 +70,11 @@ import com.streamlux.app.ui.theme.PrimaryOrange
 import java.io.ByteArrayInputStream
 import java.io.FileOutputStream
 import java.net.URI
-import android.webkit.JavascriptInterface
-import android.util.Base64
+import com.streamlux.app.utils.findActivity
+import com.streamlux.app.utils.BlobDownloadInterface
+import com.streamlux.app.utils.BrowserConstants
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
-
-private const val DESKTOP_CHROME_UA =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 private val AD_DOMAINS = listOf(
     "bet", "pop", "fap", "traff", "doubleclick", "adservice", 
@@ -92,37 +89,7 @@ private val WHITELIST_DOMAINS = listOf(
     "dlhd.so", "cdn-live.tv"
 )
 
-private fun Context.findActivity(): Activity? {
-    var ctx = this
-    while (ctx is ContextWrapper) {
-        if (ctx is Activity) return ctx
-        ctx = ctx.baseContext
-    }
-    return null
-}
-
-class BlobDownloadInterface(private val context: Context) {
-    @JavascriptInterface
-    fun downloadBlob(base64Data: String, fileName: String, mimeType: String) {
-        try {
-            val fileData = Base64.decode(base64Data.substringAfter("base64,"), Base64.DEFAULT)
-            val file = java.io.File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                fileName
-            )
-            FileOutputStream(file).use { it.write(fileData) }
-            
-            (context as? android.app.Activity)?.runOnUiThread {
-                Toast.makeText(context, "Blob Download Complete: $fileName", Toast.LENGTH_LONG).show()
-            }
-            
-            // Trigger a scan so it shows up in file manager immediately
-            android.media.MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
-        } catch (e: Exception) {
-            Log.e("StreamLuxPlayer", "Blob download failed", e)
-        }
-    }
-}
+// Removed duplicate definitions - moved to WebViewUtils.kt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
@@ -243,7 +210,7 @@ fun VideoPlayerScreen(
                         loadWithOverviewMode = true
                         useWideViewPort = true
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        userAgentString = DESKTOP_CHROME_UA
+                        userAgentString = BrowserConstants.DESKTOP_CHROME_UA
                         
                         setSupportMultipleWindows(true)
                         javaScriptCanOpenWindowsAutomatically = true
@@ -335,13 +302,7 @@ fun VideoPlayerScreen(
                             val url = request?.url?.toString() ?: return null
                             
                             // CLOAKING: Remove X-Requested-With for mirrors to prevent app-blocking
-                            val isMirror = url.contains("vidvault", true) || 
-                                           url.contains("videasy", true) || 
-                                           url.contains("vidsrc", true) || 
-                                           url.contains("vidplay", true) || 
-                                           url.contains("2embed", true) || 
-                                           url.contains("dl.", true) ||
-                                           url.contains("storage", true)
+                            val isMirror = BrowserConstants.MIRROR_DOMAINS.any { url.contains(it, true) }
 
                             if (isMirror && request.method == "GET") {
                                 try {

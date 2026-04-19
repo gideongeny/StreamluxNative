@@ -47,6 +47,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.app.DownloadManager
+import android.content.Context
+import android.os.Environment
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
+import com.streamlux.app.utils.findActivity
+import com.streamlux.app.utils.BlobDownloadInterface
+import com.streamlux.app.utils.BrowserConstants
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 import coil.compose.AsyncImage
 import com.streamlux.app.ui.components.StarRating
@@ -72,6 +87,16 @@ fun MediaDetailScreen(
     var commentText by remember { mutableStateOf("") }
     var showVidVault by remember { mutableStateOf(false) }
     var portalUrl by remember { mutableStateOf("") }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    // UNIVERSAL BACK NAVIGATION: Handle hardware back button for portal
+    BackHandler(enabled = showVidVault) {
+        if (webViewRef?.canGoBack() == true) {
+            webViewRef?.goBack()
+        } else {
+            showVidVault = false
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (filmInfo == null) {
@@ -550,11 +575,76 @@ fun MediaDetailScreen(
                     modifier = Modifier.fillMaxSize().padding(top = 48.dp),
                     factory = { ctx ->
                         android.webkit.WebView(ctx).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                            webViewClient = android.webkit.WebViewClient()
+                            webViewRef = this
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                databaseEnabled = true
+                                mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                userAgentString = BrowserConstants.DESKTOP_CHROME_UA
+                                setSupportMultipleWindows(true)
+                                javaScriptCanOpenWindowsAutomatically = true
+                            }
+                            
+                            addJavascriptInterface(BlobDownloadInterface(ctx), "AndroidBlob")
+
+                            setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+                                try {
+                                    val request = DownloadManager.Request(Uri.parse(url))
+                                    request.setMimeType(mimetype)
+                                    request.addRequestHeader("User-Agent", userAgent)
+                                    request.addRequestHeader("Referer", dlUrl)
+                                    
+                                    val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype)
+                                    request.setDescription("Downloading $fileName")
+                                    request.setTitle(fileName)
+                                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                                    
+                                    val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                    dm.enqueue(request)
+                                    Toast.makeText(ctx, "Download started: $fileName", Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    Log.e("StreamLuxPortal", "Download failed", e)
+                                    Toast.makeText(ctx, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                                    val url = request?.url?.toString() ?: return null
+                                    val isMirror = BrowserConstants.MIRROR_DOMAINS.any { url.contains(it, true) }
+                                    
+                                    if (isMirror && request.method == "GET") {
+                                        try {
+                                            val client = OkHttpClient.Builder().followRedirects(true).build()
+                                            val reqBuilder = Request.Builder().url(url)
+                                            request.requestHeaders.forEach { (k, v) ->
+                                                if (!k.equals("X-Requested-With", true)) {
+                                                    reqBuilder.addHeader(k, v)
+                                                }
+                                            }
+                                            val resp = client.newCall(reqBuilder.build()).execute()
+                                            val body = resp.body
+                                            if (body != null) {
+                                                val contentType = resp.header("Content-Type", "text/html") ?: "text/html"
+                                                return WebResourceResponse(
+                                                    contentType.split(";")[0],
+                                                    resp.header("Content-Encoding", "UTF-8"),
+                                                    body.byteStream()
+                                                )
+                                            }
+                                        } catch (e: Exception) { }
+                                    }
+                                    return null
+                                }
+
+                                override fun onPageFinished(v: WebView?, u: String?) {
+                                    super.onPageFinished(v, u)
+                                    val bridge = "(function(){ if(window.lxActive) return; window.lxActive=true; document.addEventListener('click', function(e){ var t=e.target.closest('a'); if(!t) return; var h=t.href; if(h&&(h.startsWith('blob:')||h.startsWith('data:'))){ e.preventDefault(); var xhr=new XMLHttpRequest(); xhr.open('GET', h, true); xhr.responseType='blob'; xhr.onload=function(){ if(this.status==200){ var b=this.response; var r=new FileReader(); r.onloadend=function(){ window.AndroidBlob.downloadBlob(r.result, t.getAttribute('download')||'file', b.type); }; r.readAsDataURL(b); } }; xhr.send(); } }, true); })();"
+                                    v?.evaluateJavascript(bridge, null)
+                                }
+                            }
                             loadUrl(dlUrl)
                         }
                     }
@@ -562,15 +652,30 @@ fun MediaDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 0.dp, start = 12.dp, end = 12.dp)
+                        .padding(top = 0.dp)
                         .background(Color(0xFF111111))
-                        .padding(4.dp),
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("⬇ Download Portal", color = PrimaryOrange, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    IconButton(onClick = { showVidVault = false }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Close", tint = Color.White)
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { 
+                            webViewRef?.loadUrl(dlUrl)
+                        }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        
+                        IconButton(onClick = { 
+                            webViewRef?.reload() 
+                        }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Reload", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+
+                        IconButton(onClick = { showVidVault = false }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             }
