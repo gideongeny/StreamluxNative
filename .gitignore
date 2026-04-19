@@ -1,0 +1,11 @@
+/local.properties
+/secrets.properties
+.env
+*.log
+*.txt
+/app/build
+/build
+.idea/
+*.iml
+/gradle
+/.gradle

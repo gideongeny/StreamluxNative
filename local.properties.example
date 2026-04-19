@@ -1,0 +1,20 @@
+# StreamLux Native - Secrets Template
+# Copy this file to 'local.properties' and fill in the values below.
+
+GROQ_API_KEY=your_key_here
+GOOGLE_WEB_CLIENT_ID=your_id_here
+FIREBASE_API_KEY=your_key_here
+FIREBASE_MESSAGING_SENDER_ID=your_id_here
+FIREBASE_APP_ID=your_id_here
+TMDB_API_KEY=your_key_here
+OMD_API_KEY=your_key_here
+FANART_API_KEY=your_key_here
+TRAKT_CLIENT_ID=your_id_here
+TASTEDIVE_API_KEY=your_key_here
+WATCHMODE_API_KEY=your_key_here
+APISPORTS_KEY=your_key_here
+SCOREBAT_TOKEN=your_token_here
+YOUTUBE_API_KEY_1=your_key_1
+YOUTUBE_API_KEY_2=your_key_2
+YOUTUBE_API_KEY_3=your_key_3
+YOUTUBE_API_KEY_4=your_key_4
