@@ -90,6 +90,34 @@ private fun Context.findActivity(): Activity? {
     return null
 }
 
+class BlobDownloadInterface(private val context: Context) {
+    @JavascriptInterface
+    fun downloadBlob(base64Data: String, fileName: String, mimeType: String) {
+        try {
+            val fileData = Base64.decode(base64Data.substringAfter("base64,"), Base64.DEFAULT)
+            val file = java.io.File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                fileName
+            )
+            FileOutputStream(file).use { it.write(fileData) }
+            
+            (context as? android.app.Activity)?.runOnUiThread {
+                Toast.makeText(context, "Blob Download Complete: $fileName", Toast.LENGTH_LONG).show()
+            }
+            
+            // Trigger a scan so it shows up in file manager immediately
+            android.media.MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
+        } catch (e: Exception) {
+            Log.e("StreamLuxPlayer", "Blob download failed", e)
+        }
+    }
+}
+
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+
+@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun VideoPlayerScreen(
@@ -215,6 +243,9 @@ fun VideoPlayerScreen(
                         cacheMode = WebSettings.LOAD_DEFAULT
                     }
 
+                    // REGISTER BLOB BRIDGE
+                    addJavascriptInterface(BlobDownloadInterface(activityContext), "AndroidBlob")
+
                     // MASTER ORIGIN HANDSHAKE: Treat WebView like a browser
                     val cookieManager = CookieManager.getInstance()
                     cookieManager.setAcceptCookie(true)
@@ -281,6 +312,46 @@ fun VideoPlayerScreen(
                     }
 
                     webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                        ): WebResourceResponse? {
+                            val url = request?.url?.toString() ?: return null
+                            
+                            // CLOAKING: Remove X-Requested-With for mirrors to prevent app-blocking
+                            val isPortal = url.contains("vidvault", true) || 
+                                           url.contains("videasy", true) || 
+                                           url.contains("dl.", true) ||
+                                           url.contains("storage", true)
+
+                            if (isPortal && request.method == "GET") {
+                                try {
+                                    val client = OkHttpClient.Builder()
+                                        .followRedirects(true)
+                                        .build()
+
+                                    val reqBuilder = Request.Builder().url(url)
+                                    request.requestHeaders.forEach { (k, v) ->
+                                        if (!k.equals("X-Requested-With", true)) {
+                                            reqBuilder.addHeader(k, v)
+                                        }
+                                    }
+                                    
+                                    val response = client.newCall(reqBuilder.build()).execute()
+                                    val body = response.body
+                                    if (body != null) {
+                                        val contentType = response.header("Content-Type", "text/html") ?: "text/html"
+                                        return WebResourceResponse(
+                                            contentType.split(";")[0],
+                                            response.header("Content-Encoding", "UTF-8"),
+                                            body.byteStream()
+                                        )
+                                    }
+                                } catch (e: Exception) { }
+                            }
+                            return null
+                        }
+
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                             // FULL FREEDOM: No longer blocking domains for non-live/sports content
                             // This allows portals to redirect freely across different domains
@@ -297,27 +368,52 @@ fun VideoPlayerScreen(
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             
-                            // MASTER PORTAL CLOAKING: Hide website UI to reveal only the player
-                            val cloakScript = """
+                            // 1. UNIVERSAL DOWNLOAD BRIDGE (Intercepts Blobs, Data, and Clicks)
+                            val downloadBridge = """
                                 (function() {
-                                    var style = document.createElement('style');
-                                    style.innerHTML = `
-                                        .fixed.top-0, 
-                                        .fixed.bottom-0, 
-                                        .z-\\[110\\], 
-                                        .z-\\[10002\\], 
-                                        button[class*='z-[10002]'] {
-                                            display: none !important;
+                                    if (window.lxBridgeActive) return;
+                                    window.lxBridgeActive = true;
+                                    document.addEventListener('click', function(e) {
+                                        var target = e.target.closest('a');
+                                        if (!target) return;
+                                        var href = target.href;
+                                        if (href && (href.startsWith('blob:') || href.startsWith('data:'))) {
+                                            e.preventDefault();
+                                            var fileName = target.getAttribute('download') || 'downloaded_file';
+                                            var xhr = new XMLHttpRequest();
+                                            xhr.open('GET', href, true);
+                                            xhr.responseType = 'blob';
+                                            xhr.onload = function() {
+                                                if (this.status == 200) {
+                                                    var b = this.response;
+                                                    var r = new FileReader();
+                                                    r.onloadend = function() { window.AndroidBlob.downloadBlob(r.result, fileName, b.type); };
+                                                    r.readAsDataURL(b);
+                                                }
+                                            };
+                                            xhr.send();
                                         }
-                                        body, html {
-                                            overflow: hidden !important;
-                                            background-color: black !important;
-                                        }
-                                    `;
-                                    document.head.appendChild(style);
-                                })()
+                                    }, true);
+                                })();
                             """.trimIndent()
-                            view?.evaluateJavascript(cloakScript, null)
+                            view?.evaluateJavascript(downloadBridge, null)
+
+                            // 2. CONDITIONAL CLOAKING: Only hide UI on our own web app, leave portals fully interactive
+                            val isOurApp = url?.contains("streamlux-67a84.web.app") == true
+                            if (isOurApp) {
+                                val cloakScript = """
+                                    (function() {
+                                        var style = document.createElement('style');
+                                        style.innerHTML = `
+                                            .fixed.top-0, .fixed.bottom-0, .z-\\[110\\], .z-\\[10002\\], 
+                                            button[class*='z-[10002]'] { display: none !important; }
+                                            body, html { overflow: hidden !important; background-color: black !important; }
+                                        `;
+                                        document.head.appendChild(style);
+                                    })()
+                                """.trimIndent()
+                                view?.evaluateJavascript(cloakScript, null)
+                            }
                             
                             isLoaded = true
                         }
