@@ -23,6 +23,9 @@ class LiveTVViewModel @Inject constructor(
     
     private val _activeCategory = MutableStateFlow("All")
     val activeCategory: StateFlow<String> = _activeCategory
+
+    private val _activeCountry = MutableStateFlow("All")
+    val activeCountry: StateFlow<String> = _activeCountry
     
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
@@ -30,18 +33,32 @@ class LiveTVViewModel @Inject constructor(
     private val _categories = MutableStateFlow<List<String>>(listOf("All"))
     val categories: StateFlow<List<String>> = _categories
 
+    private val _countries = MutableStateFlow<List<String>>(listOf("All"))
+    val countries: StateFlow<List<String>> = _countries
+
     init {
         viewModelScope.launch {
-            // Fetch channels dynamically from Firebase Hosting
             val channels = tvChannelRepository.getLiveChannels()
             _allChannels.value = channels
-            _categories.value = listOf("All") + channels.map { it.category }.distinct()
+            _categories.value = listOf("All") + channels.map { it.category }.distinct().sorted()
+            updateCountries(channels, "All")
             _isLoading.value = false
         }
     }
 
+    private fun updateCountries(channels: List<TVChannel>, category: String) {
+        val available = if (category == "All") channels else channels.filter { it.category == category }
+        _countries.value = listOf("All") + available.map { it.country ?: "Global" }.distinct().sorted()
+    }
+
     fun setCategory(category: String) {
         _activeCategory.value = category
+        _activeCountry.value = "All" // Reset country on category change
+        updateCountries(_allChannels.value, category)
+    }
+
+    fun setCountry(country: String) {
+        _activeCountry.value = country
     }
 
     fun setSearchQuery(query: String) {

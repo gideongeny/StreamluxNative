@@ -37,16 +37,19 @@ fun ExploreScreen(
     onNavigateToProfile: () -> Unit
 ) {
     val activeCategory by viewModel.activeCategory.collectAsState()
+    val activeCountry by viewModel.activeCountry.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     
     val allChannels by viewModel.allChannels.collectAsState()
     val categories by viewModel.categories.collectAsState()
+    val countries by viewModel.countries.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
     val filteredChannels = allChannels.filter { channel ->
         val matchesCategory = activeCategory == "All" || channel.category == activeCategory
+        val matchesCountry = activeCountry == "All" || (channel.country ?: "Global") == activeCountry
         val matchesSearch = channel.name.contains(searchQuery, ignoreCase = true)
-        matchesCategory && matchesSearch
+        matchesCategory && matchesCountry && matchesSearch
     }
 
     Column(
@@ -102,7 +105,7 @@ fun ExploreScreen(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
-            placeholder = { Text("Search 50+ Premium Channels...") },
+            placeholder = { Text("Search 2000+ Premium Channels...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray) },
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             colors = TextFieldDefaults.outlinedTextFieldColors(
@@ -118,7 +121,7 @@ fun ExploreScreen(
         // Categories Bar
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 12.dp)
         ) {
             items(categories) { cat ->
                 val isSelected = activeCategory == cat
@@ -131,6 +134,26 @@ fun ExploreScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(text = cat, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+
+        // Countries Bar
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(bottom = 24.dp)
+        ) {
+            items(countries) { country ->
+                val isSelected = activeCountry == country
+                TextButton(
+                    onClick = { viewModel.setCountry(country) },
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = if (isSelected) Color(0xFF4ADE80) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
+                        contentColor = if (isSelected) Color.White else Color.Gray
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(text = country, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
             }
         }

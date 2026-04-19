@@ -7,5 +7,7 @@ data class TVChannel(
     val url: String,
     val category: String,
     val logo: String? = null,
-    val isExternal: Boolean = false
+    val isExternal: Boolean = false,
+    val country: String? = null,
+    val countryCode: String? = null
 )

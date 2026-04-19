@@ -13,8 +13,8 @@ class TvChannelRepository @Inject constructor(
 ) {
     private var cachedChannels: List<TVChannel>? = null
 
-    private val CHANNELS_URL =
-        "https://streamlux-67a84.web.app/live_channels.json"
+    private fun getChannelsUrl(): String = 
+        "https://streamlux-67a84.web.app/live_channels.json?t=${System.currentTimeMillis()}"
 
     suspend fun getLiveChannels(): List<TVChannel> {
         cachedChannels?.let { return it }
@@ -22,7 +22,7 @@ class TvChannelRepository @Inject constructor(
         return try {
             val json = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val request = Request.Builder()
-                    .url(CHANNELS_URL)
+                    .url(getChannelsUrl())
                     .build()
                 okHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
@@ -51,7 +51,9 @@ class TvChannelRepository @Inject constructor(
                     url = obj.optString("url"),
                     category = obj.optString("category", "Entertainment"),
                     logo = if (obj.has("logo") && !obj.isNull("logo")) obj.getString("logo") else null,
-                    isExternal = obj.optBoolean("isExternal", false)
+                    isExternal = obj.optBoolean("isExternal", false),
+                    country = obj.optString("country", "Global"),
+                    countryCode = obj.optString("countryCode", null)
                 )
             )
         }

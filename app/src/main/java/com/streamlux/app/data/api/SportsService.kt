@@ -45,7 +45,7 @@ class SportsService @Inject constructor(
 
     private suspend fun fetchGatewaySports(kind: String): List<SportsFixture> {
         val request = Request.Builder()
-            .url("$GATEWAY_BASE/api/sports/$kind")
+            .url("$GATEWAY_BASE/api/sports/$kind?t=${System.currentTimeMillis()}")
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36")
             .build()
         
@@ -171,7 +171,7 @@ class SportsService @Inject constructor(
             }
             
             val request = Request.Builder()
-                .url("$GATEWAY_BASE/api/proxy/external")
+                .url("$GATEWAY_BASE/api/proxy/external?t=${System.currentTimeMillis()}")
                 .post(body.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
