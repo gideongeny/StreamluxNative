@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -58,6 +59,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.mediarouter.app.MediaRouteButton
 import com.google.android.gms.cast.framework.CastButtonFactory
@@ -138,6 +142,15 @@ fun VideoPlayerScreen(
     var lastJsMessage by remember { mutableStateOf("") }
     var lastBlockedUrl by remember { mutableStateOf("") }
     var isPiPMode by remember { mutableStateOf(false) }
+
+    // BROWSER NAVIGATION: Handle hardware back button
+    BackHandler(enabled = true) {
+        if (webViewRef?.canGoBack() == true) {
+            webViewRef?.goBack()
+        } else {
+            onNavigateBack()
+        }
+    }
 
     DisposableEffect(context) {
         MainActivity.isPlayingVideo = true
@@ -322,12 +335,15 @@ fun VideoPlayerScreen(
                             val url = request?.url?.toString() ?: return null
                             
                             // CLOAKING: Remove X-Requested-With for mirrors to prevent app-blocking
-                            val isPortal = url.contains("vidvault", true) || 
+                            val isMirror = url.contains("vidvault", true) || 
                                            url.contains("videasy", true) || 
+                                           url.contains("vidsrc", true) || 
+                                           url.contains("vidplay", true) || 
+                                           url.contains("2embed", true) || 
                                            url.contains("dl.", true) ||
                                            url.contains("storage", true)
 
-                            if (isPortal && request.method == "GET") {
+                            if (isMirror && request.method == "GET") {
                                 try {
                                     val client = OkHttpClient.Builder()
                                         .followRedirects(true)
@@ -470,13 +486,48 @@ fun VideoPlayerScreen(
             )
 
             IconButton(
-                onClick = onNavigateBack,
+                onClick = {
+                    if (webViewRef?.canGoBack() == true) {
+                        webViewRef?.goBack()
+                    } else {
+                        onNavigateBack()
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(top = 40.dp, start = 12.dp)
                     .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
             ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
+
+            // BROWSER CONTROLS: Home and Reload
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 40.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(onClick = {
+                    currentServer?.url?.let { url ->
+                        val headers = HashMap<String, String>()
+                        headers["Referer"] = "https://streamlux-67a84.web.app/"
+                        headers["Origin"] = "https://streamlux-67a84.web.app"
+                        headers["X-Requested-With"] = ""
+                        webViewRef?.loadUrl(url, headers)
+                        isLoaded = false
+                    }
+                }) {
+                    Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.White)
+                }
+                
+                IconButton(onClick = { 
+                    webViewRef?.reload() 
+                    isLoaded = false
+                }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Reload", tint = Color.White)
+                }
             }
         }
     }
