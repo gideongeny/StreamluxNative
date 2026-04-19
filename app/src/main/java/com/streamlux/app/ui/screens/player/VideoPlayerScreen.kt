@@ -63,7 +63,13 @@ import com.google.android.gms.cast.framework.CastButtonFactory
 import com.streamlux.app.MainActivity
 import com.streamlux.app.ui.theme.PrimaryOrange
 import java.io.ByteArrayInputStream
+import java.io.FileOutputStream
 import java.net.URI
+import android.webkit.JavascriptInterface
+import android.util.Base64
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 
 private const val DESKTOP_CHROME_UA =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -111,11 +117,6 @@ class BlobDownloadInterface(private val context: Context) {
             Log.e("StreamLuxPlayer", "Blob download failed", e)
         }
     }
-}
-
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
