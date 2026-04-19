@@ -56,13 +56,14 @@ class SportsService @Inject constructor(
     }
 
     private suspend fun fetchESPNFixtures(): List<SportsFixture> = coroutineScope {
+        val t = System.currentTimeMillis()
         val endpoints = listOf(
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard",
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard", 
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/scoreboard",
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard",
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard",
-            "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?t=$t",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard?t=$t", 
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/scoreboard?t=$t",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?t=$t",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?t=$t",
+            "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?t=$t"
         )
         
         val deferreds = endpoints.map { url ->

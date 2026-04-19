@@ -253,9 +253,21 @@ fun VideoPlayerScreen(
                             isUserGesture: Boolean,
                             resultMsg: android.os.Message?
                         ): Boolean {
-                            val dummyWebView = WebView(view!!.context)
                             val transport = resultMsg?.obj as? WebView.WebViewTransport
-                            transport?.webView = dummyWebView
+                            val context = view?.context ?: return false
+                            
+                            // HELPER: Create a transient WebView to capture the new URL and redirect it to the MAIN view
+                            val newWebView = WebView(context)
+                            newWebView.webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                                    val url = request?.url?.toString() ?: ""
+                                    Log.d("StreamLuxPlayer", "REDIRECT: Handling new tab request -> $url")
+                                    webViewRef?.loadUrl(url)
+                                    return true
+                                }
+                            }
+                            
+                            transport?.webView = newWebView
                             resultMsg?.sendToTarget()
                             return true
                         }
