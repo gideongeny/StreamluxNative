@@ -13,6 +13,10 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.app.DownloadManager
+import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -208,6 +212,31 @@ fun VideoPlayerScreen(
                     val cookieManager = CookieManager.getInstance()
                     cookieManager.setAcceptCookie(true)
                     cookieManager.setAcceptThirdPartyCookies(this, true)
+
+                    setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+                        try {
+                            val request = DownloadManager.Request(Uri.parse(url))
+                            request.setMimeType(mimetype)
+                            
+                            // PASS HEADERS: Crucial for portals that check origin/referer
+                            request.addRequestHeader("User-Agent", userAgent)
+                            request.addRequestHeader("Referer", "https://streamlux-67a84.web.app/")
+                            
+                            val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype)
+                            request.setDescription("Downloading $fileName")
+                            request.setTitle(fileName)
+                            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                            
+                            val dm = activityContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            dm.enqueue(request)
+                            
+                            Toast.makeText(activityContext, "Download started: $fileName", Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            Log.e("StreamLuxPlayer", "Download failed", e)
+                            Toast.makeText(activityContext, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
 
                     // AUDIT: Hardware Acceleration & Layers
                     setLayerType(View.LAYER_TYPE_HARDWARE, null)

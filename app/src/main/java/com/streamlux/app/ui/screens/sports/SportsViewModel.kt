@@ -34,8 +34,16 @@ class SportsViewModel @Inject constructor(
 
     private var pollJob: kotlinx.coroutines.Job? = null
 
+    private val _ticker = MutableStateFlow(System.currentTimeMillis())
+
     init {
         startPolling()
+        viewModelScope.launch {
+            while(true) {
+                _ticker.value = System.currentTimeMillis()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
     }
 
     private fun startPolling() {
@@ -49,46 +57,59 @@ class SportsViewModel @Inject constructor(
                 val highlightsTask = async { sportsService.getHighlights() }
                 
                 val now = System.currentTimeMillis()
-                val matchDurationMillis = 3 * 60 * 60 * 1000L // 3 hours cutoff for stale matches
+                val matchDurationMillis = 3 * 60 * 60 * 1000L
 
                 val rawLive = liveTask.await()
-                _liveMatches.value = rawLive.filter { it.status == "live" || it.isLive }
-                _finishedMatches.value = rawLive.filter { it.status == "finished" }
-                
                 val incomingUpcoming = upcomingTask.await()
-                val espnUpcoming = rawLive.filter { it.status == "upcoming" && !it.isLive }
-                val allUpcoming = (incomingUpcoming + espnUpcoming).distinctBy { it.id }
                 
-                _upcomingMatches.value = allUpcoming.filter { fixture ->
-                    try {
-                        val kickoff = if (fixture.kickoffTime.isNotEmpty()) {
-                            if (fixture.kickoffTime.contains("T")) {
-                                java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
-                            } else if (fixture.kickoffTime.contains("-")) {
-                                // Fallback for simple date strings YYYY-MM-DD
-                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                                sdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
-                            } else 0L
-                        } else 0L
+                val allMatches = (rawLive + incomingUpcoming).distinctBy { it.id }
+                
+                val currentLive = mutableListOf<SportsFixture>()
+                val currentUpcoming = mutableListOf<SportsFixture>()
+                val currentFinished = mutableListOf<SportsFixture>()
 
-                        if (kickoff > 0) {
-                            // If match started more than 3 hours ago, hide it (stale)
-                            (now - kickoff) < matchDurationMillis
-                        } else {
-                            // If no parseable date, only hide if it's "Yesterday"
-                            !fixture.kickoffTime.lowercase().contains("yesterday")
-                        }
-                    } catch (e: Exception) {
-                        true
+                allMatches.forEach { fixture ->
+                    val kickoff = try {
+                        if (fixture.kickoffTime.contains("T")) {
+                            java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
+                        } else if (fixture.kickoffTime.contains("-")) {
+                            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            sdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
+                        } else 0L
+                    } catch (e: Exception) { 0L }
+
+                    val isExpired = kickoff > 0 && (now - kickoff) >= matchDurationMillis
+                    val isLiveNow = (fixture.status == "live" || fixture.isLive) && !isExpired
+                    val hasStarted = kickoff > 0 && now >= kickoff && !isExpired
+
+                    if (isExpired) {
+                        // Gone forever after 3 hours
+                    } else if (isLiveNow || hasStarted) {
+                        currentLive.add(fixture.copy(status = "live", isLive = true))
+                    } else if (fixture.status == "finished") {
+                        currentFinished.add(fixture)
+                    } else {
+                        val countdownStr = if (kickoff > now) formatCountdown(kickoff - now) else null
+                        currentUpcoming.add(fixture.copy(countdown = countdownStr))
                     }
                 }
-                
+
+                _liveMatches.value = currentLive
+                _upcomingMatches.value = currentUpcoming
+                _finishedMatches.value = currentFinished
                 _highlights.value = highlightsTask.await()
                 
                 _isLoading.value = false
-                kotlinx.coroutines.delay(45000) // Poll every 45 secs
+                kotlinx.coroutines.delay(45000)
             }
         }
+    }
+
+    private fun formatCountdown(diff: Long): String {
+        val seconds = (diff / 1000) % 60
+        val minutes = (diff / (1000 * 60)) % 60
+        val hours = (diff / (1000 * 60 * 60))
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     fun loadSportsData() {

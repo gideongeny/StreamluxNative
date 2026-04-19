@@ -13,7 +13,8 @@ data class SportsFixture(
     val awayScore: String? = null,
     val minute: String? = null,
     val isLive: Boolean = false,
-    val venue: String? = null
+    val venue: String? = null,
+    val countdown: String? = null
 )
 
 data class SportsHighlight(

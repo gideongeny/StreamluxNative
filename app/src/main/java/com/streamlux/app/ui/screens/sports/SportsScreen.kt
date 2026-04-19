@@ -304,9 +304,17 @@ fun UpcomingFixtureRow(fixture: SportsFixture, onClick: () -> Unit) {
             Text(fixture.leagueName, color = PrimaryOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
             Text("${fixture.homeTeam} vs ${fixture.awayTeam}", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            if (fixture.countdown != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Timer, contentDescription = null, tint = Color.Green, modifier = Modifier.size(10.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Starts in ${fixture.countdown}", color = Color.Green, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                }
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(fixture.kickoffTime, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(fixture.kickoffTime.split("T").firstOrNull() ?: fixture.kickoffTime, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text(fixture.venue ?: "Official Stadium", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f), fontSize = 10.sp)
         }
     }
