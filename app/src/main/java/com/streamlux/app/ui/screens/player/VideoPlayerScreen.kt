@@ -161,15 +161,18 @@ fun VideoPlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        val isNativeRequired = viewModel.mediaType == "live" || viewModel.mediaType == "sports"
+        val url = currentServer?.url ?: ""
+        val isDirectStream = url.contains(".m3u8", ignoreCase = true) || 
+                             url.contains(".mpd", ignoreCase = true) ||
+                             url.contains(".m3u", ignoreCase = true)
+                             
+        val isNativeRequired = (viewModel.mediaType == "live" || viewModel.mediaType == "sports") && isDirectStream
 
         if (isNativeRequired) {
-            currentServer?.url?.let { url ->
-                NativeHlsPlayer(
-                    url = url,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+            NativeHlsPlayer(
+                url = url,
+                modifier = Modifier.fillMaxSize()
+            )
         } else {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),

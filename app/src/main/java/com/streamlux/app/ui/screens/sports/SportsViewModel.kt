@@ -48,24 +48,35 @@ class SportsViewModel @Inject constructor(
                 val upcomingTask = async { sportsService.getUpcomingMatches() }
                 val highlightsTask = async { sportsService.getHighlights() }
                 
-                val allRaw = liveTask.await()
-                _liveMatches.value = allRaw.filter { it.status == "live" || it.isLive }
-                _finishedMatches.value = allRaw.filter { it.status == "finished" }
+                val now = System.currentTimeMillis()
+                val matchDurationMillis = 3 * 60 * 60 * 1000L // 3 hours cutoff for stale matches
+
+                val rawLive = liveTask.await()
+                _liveMatches.value = rawLive.filter { it.status == "live" || it.isLive }
+                _finishedMatches.value = rawLive.filter { it.status == "finished" }
                 
                 val incomingUpcoming = upcomingTask.await()
-                val espnUpcoming = allRaw.filter { it.status == "upcoming" && !it.isLive }
+                val espnUpcoming = rawLive.filter { it.status == "upcoming" && !it.isLive }
                 val allUpcoming = (incomingUpcoming + espnUpcoming).distinctBy { it.id }
-                
-                val now = java.time.Instant.now().toEpochMilli()
-                val matchDurationMillis = 2 * 60 * 60 * 1000L + 30 * 60 * 1000L // 2.5 hours
                 
                 _upcomingMatches.value = allUpcoming.filter { fixture ->
                     try {
-                        if (fixture.kickoffTime.isNotEmpty() && fixture.kickoffTime.contains("T")) {
-                            val kickoff = java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
+                        val kickoff = if (fixture.kickoffTime.isNotEmpty()) {
+                            if (fixture.kickoffTime.contains("T")) {
+                                java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
+                            } else if (fixture.kickoffTime.contains("-")) {
+                                // Fallback for simple date strings YYYY-MM-DD
+                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                sdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
+                            } else 0L
+                        } else 0L
+
+                        if (kickoff > 0) {
+                            // If match started more than 3 hours ago, hide it (stale)
                             (now - kickoff) < matchDurationMillis
                         } else {
-                            true
+                            // If no parseable date, only hide if it's "Yesterday"
+                            !fixture.kickoffTime.lowercase().contains("yesterday")
                         }
                     } catch (e: Exception) {
                         true

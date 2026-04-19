@@ -4,6 +4,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.*
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.draw.alpha
+import coil.compose.AsyncImage
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -172,8 +177,14 @@ fun ExploreScreen(
             ) {
             items(filteredChannels) { channel ->
                 val context = androidx.compose.ui.platform.LocalContext.current
-                val logoResId = remember(channel.logo) {
-                    if (channel.logo != null) {
+                val remoteLogoUrl = remember(channel.logo) {
+                    if (channel.logo != null && !channel.logo.startsWith("http")) {
+                        "https://streamlux-67a84.web.app/assets/logos/${channel.logo}.png"
+                    } else channel.logo
+                }
+
+                val localLogoResId = remember(channel.logo) {
+                    if (channel.logo != null && !channel.logo.startsWith("http")) {
                         context.resources.getIdentifier(channel.logo, "drawable", context.packageName)
                     } else 0
                 }
@@ -188,12 +199,19 @@ fun ExploreScreen(
                             onNavigateToPlayer(channel.url, channel.name)
                         }
                 ) {
-                    if (logoResId != 0) {
+                    if (localLogoResId != 0) {
                         Image(
-                            painter = painterResource(id = logoResId),
+                            painter = painterResource(id = localLogoResId),
                             contentDescription = channel.name,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
+                        )
+                    } else if (remoteLogoUrl != null) {
+                        AsyncImage(
+                            model = remoteLogoUrl,
+                            contentDescription = channel.name,
+                            modifier = Modifier.fillMaxSize().alpha(0.3f),
+                            contentScale = ContentScale.Fit
                         )
                     }
 
@@ -259,7 +277,7 @@ fun ExploreScreen(
                                 }
                             }
 
-                            if (logoResId == 0) {
+                            if (localLogoResId == 0) {
                                 Box(
                                     modifier = Modifier
                                         .size(48.dp)
@@ -267,12 +285,22 @@ fun ExploreScreen(
                                         .background(Color.White.copy(alpha = 0.12f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LiveTv,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
+                                    if (remoteLogoUrl != null) {
+                                        AsyncImage(
+                                            model = remoteLogoUrl,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(32.dp),
+                                            contentScale = ContentScale.Fit,
+                                            error = rememberVectorPainter(Icons.Default.LiveTv)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.LiveTv,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
