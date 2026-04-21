@@ -10,14 +10,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.*
+import android.widget.Toast
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -53,7 +47,6 @@ import android.app.DownloadManager
 import android.content.Context
 import android.os.Environment
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
@@ -83,6 +76,31 @@ fun MediaDetailScreen(
     val seasonEpisodes by viewModel.seasonEpisodes.collectAsState()
     val comments by viewModel.comments.collectAsState()
     val isBookmarked by viewModel.isBookmarked.collectAsState()
+    val downloadedItem by viewModel.downloadedItem.collectAsState()
+    val downloadedEpisodes by viewModel.downloadedEpisodes.collectAsState()
+    
+    // Add logic to check if we can play offline
+    val isAvailableOffline = downloadedItem?.downloadStatus == "completed" && downloadedItem?.localUri != null
+
+    if (filmInfo == null) {
+        // LOADING OR OFFLINE STATE
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                androidx.compose.material3.CircularProgressIndicator(color = PrimaryOrange)
+                Spacer(Modifier.height(16.dp))
+                Text("Loading details...", color = Color.Gray)
+                Text("(Check connection if this takes too long)", color = Color.DarkGray, fontSize = 12.sp)
+                
+                Spacer(Modifier.height(24.dp))
+                androidx.compose.material3.TextButton(onClick = { onNavigateBack() }) {
+                    Text("Go Back", color = PrimaryOrange)
+                }
+            }
+        }
+        return
+    }
+
+    val item = filmInfo!!.detail // Guaranteed non-null after check
     
     var commentText by remember { mutableStateOf("") }
     var showVidVault by remember { mutableStateOf(false) }
@@ -170,20 +188,36 @@ fun MediaDetailScreen(
                     // Row 1: Play Now (Full Width)
                     Button(
                         onClick = { 
-                            val encodedTitle = java.net.URLEncoder.encode(item.displayTitle, "UTF-8")
-                            val encodedPoster = java.net.URLEncoder.encode(item.posterPath ?: "", "UTF-8")
+                            val encodedTitle = android.net.Uri.encode(item.displayTitle)
+                            val encodedPoster = android.net.Uri.encode(item.posterPath ?: "null")
+                            
+                            // If it's already downloaded, play it immediately
+                            // The ID for the player is mediaId (unified for online/offline lookup)
                             onNavigateToPlayer(
                                 "player/${viewModel.mediaType}/${viewModel.mediaId}?season=$selectedSeason&episode=1&title=$encodedTitle&poster=$encodedPoster"
                             )
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryOrange),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isAvailableOffline) Color(0xFF4CAF50) else PrimaryOrange // Green for offline availability
+                        ),
                         shape = RoundedCornerShape(16.dp),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                        Icon(
+                            imageVector = if (isAvailableOffline) Icons.Default.PlayCircle else Icons.Default.PlayArrow, 
+                            contentDescription = null, 
+                            tint = Color.White, 
+                            modifier = Modifier.size(28.dp)
+                        )
                         Spacer(Modifier.width(12.dp))
-                        Text("PLAY NOW", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
+                        Text(
+                            if (isAvailableOffline) "WATCH OFFLINE" else "PLAY NOW", 
+                            color = Color.White, 
+                            fontWeight = FontWeight.Black, 
+                            fontSize = 18.sp, 
+                            letterSpacing = 1.sp
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -198,13 +232,13 @@ fun MediaDetailScreen(
                         if (filmInfo?.trailerKey != null) {
                             Button(
                                 onClick = {
-                                    val trailerUrl = "https://www.youtube.com/watch?v=${filmInfo!!.trailerKey!!}"
+                                    val trailerUrl = "https://www.youtube.com/watch?v=${filmInfo?.trailerKey}"
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(trailerUrl))
                                     try {
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
                                         // Fallback if no app can handle intent
-                                        onNavigateToPlayer("player/youtube/${filmInfo!!.trailerKey!!}?season=1&episode=1")
+                                        onNavigateToPlayer("player/youtube/${filmInfo?.trailerKey}?season=1&episode=1")
                                     }
                                 },
                                 modifier = Modifier.height(44.dp).weight(1.5f),
@@ -235,27 +269,55 @@ fun MediaDetailScreen(
                             }
                         }
 
-                        // Download Circle Icon
+                        // Download / Status Icon
+                        val downloadStatus = downloadedItem?.downloadStatus
                         Surface(
                             onClick = { 
-                                portalUrl = if (viewModel.mediaType == "tv")
-                                    "https://dl.vidsrc.vip/tv/${viewModel.mediaId}"
-                                else
-                                    "https://dl.vidsrc.vip/movie/${viewModel.mediaId}"
-                                showVidVault = true 
+                                if (downloadStatus == "completed") {
+                                    Toast.makeText(context, "Already downloaded", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    portalUrl = if (viewModel.mediaType == "tv")
+                                        "https://dl.vidsrc.vip/tv/${viewModel.mediaId}"
+                                    else
+                                        "https://dl.vidsrc.vip/movie/${viewModel.mediaId}"
+                                    showVidVault = true 
+                                }
                             },
                             modifier = Modifier.size(44.dp),
-                            color = PrimaryOrange.copy(alpha = 0.15f),
+                            color = when (downloadStatus) {
+                                "completed" -> Color(0xFF4CAF50).copy(alpha = 0.15f)
+                                "downloading" -> PrimaryOrange.copy(alpha = 0.25f)
+                                else -> PrimaryOrange.copy(alpha = 0.15f)
+                            },
                             shape = CircleShape,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryOrange.copy(alpha = 0.3f))
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp, 
+                                if (downloadStatus == "completed") Color(0xFF4CAF50).copy(alpha = 0.5f) else PrimaryOrange.copy(alpha = 0.3f)
+                            )
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Download,
-                                    contentDescription = "Download",
-                                    tint = PrimaryOrange,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                when (downloadStatus) {
+                                    "completed" -> Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Downloaded",
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    "downloading" -> {
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            progress = (downloadedItem?.downloadProgress ?: 0) / 100f,
+                                            modifier = Modifier.size(24.dp),
+                                            color = PrimaryOrange,
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                    else -> Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = "Download",
+                                        tint = PrimaryOrange,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -311,8 +373,8 @@ fun MediaDetailScreen(
                             seasonEpisodes.forEach { ep ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().clickable {
-                                        val encodedTitle = java.net.URLEncoder.encode(item.displayTitle, "UTF-8")
-                                        val encodedPoster = java.net.URLEncoder.encode(item.posterPath ?: "", "UTF-8")
+                                        val encodedTitle = android.net.Uri.encode(item.displayTitle)
+                                        val encodedPoster = android.net.Uri.encode(item.posterPath ?: "null")
                                         onNavigateToPlayer(
                                             "player/${viewModel.mediaType}/${viewModel.mediaId}?season=$selectedSeason&episode=${ep.episodeNumber}&title=$encodedTitle&poster=$encodedPoster"
                                         )
@@ -346,18 +408,43 @@ fun MediaDetailScreen(
                                         )
                                     }
                                     
+                                    // Individual Episode Download Status
+                                    val episodeStatus = downloadedEpisodes.find { 
+                                        it.seasonNumber == selectedSeason && it.episodeNumber == ep.episodeNumber 
+                                    }
+                                    
                                     IconButton(
                                         onClick = {
-                                            portalUrl = "https://dl.vidsrc.vip/tv/${viewModel.mediaId}/$selectedSeason/${ep.episodeNumber}"
-                                            showVidVault = true
+                                            if (episodeStatus?.downloadStatus != "completed") {
+                                                portalUrl = "https://dl.vidsrc.vip/tv/${viewModel.mediaId}/$selectedSeason/${ep.episodeNumber}"
+                                                showVidVault = true
+                                            } else {
+                                                Toast.makeText(context, "Episode downloaded", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Download,
-                                            contentDescription = "Download Episode",
-                                            tint = PrimaryOrange,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        when (episodeStatus?.downloadStatus) {
+                                            "completed" -> Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "Downloaded",
+                                                tint = Color(0xFF4CAF50),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            "downloading" -> {
+                                                androidx.compose.material3.CircularProgressIndicator(
+                                                    progress = (episodeStatus.downloadProgress ?: 0) / 100f,
+                                                    modifier = Modifier.size(20.dp),
+                                                    color = PrimaryOrange,
+                                                    strokeWidth = 2.dp
+                                                )
+                                            }
+                                            else -> Icon(
+                                                imageVector = Icons.Default.Download,
+                                                contentDescription = "Download Episode",
+                                                tint = PrimaryOrange,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -602,8 +689,29 @@ fun MediaDetailScreen(
                                     request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
                                     
                                     val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                    dm.enqueue(request)
-                                    Toast.makeText(ctx, "Download started: $fileName", Toast.LENGTH_LONG).show()
+                                    val downloadId = dm.enqueue(request)
+
+                                    // RECORD FOR LIBRARY
+                                    // The DL portal URL is path-based: /tv/{mediaId}/{season}/{episode}
+                                    // NOT query-param based — must parse from path segments
+                                    val currentWebUrl = webViewRef?.url ?: portalUrl
+                                    val urlPath = Uri.parse(currentWebUrl).pathSegments
+                                    // Path: ["tv", mediaId, season, episode] or similar
+                                    val s = urlPath.getOrNull(urlPath.size - 2)?.toIntOrNull() ?: selectedSeason
+                                    val e = urlPath.lastOrNull()?.toIntOrNull() ?: 1
+                                    
+                                    val epInfo = if (viewModel.mediaType == "tv") seasonEpisodes.find { it.episodeNumber == e } else null
+                                    
+                                    viewModel.onDownloadStarted(
+                                        systemDownloadId = downloadId,
+                                        quality = if (fileName.contains("1080")) "1080p" else if (fileName.contains("720")) "720p" else "480p",
+                                        season = if (viewModel.mediaType == "tv") s else null,
+                                        episode = if (viewModel.mediaType == "tv") e else null,
+                                        episodeName = epInfo?.name,
+                                        episodeStillPath = epInfo?.stillPath
+                                    )
+
+                                    Toast.makeText(ctx, "Download started: ${if (viewModel.mediaType == "tv") "S${s}E${e}" else fileName}", Toast.LENGTH_LONG).show()
                                 } catch (e: Exception) {
                                     Log.e("StreamLuxPortal", "Download failed", e)
                                     Toast.makeText(ctx, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -612,8 +720,13 @@ fun MediaDetailScreen(
 
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                                    val url = request?.url?.toString() ?: return null
-                                    val isMirror = BrowserConstants.MIRROR_DOMAINS.any { url.contains(it, true) }
+                                     val url = request?.url?.toString() ?: return null
+                                     
+                                     // IMMUNITY: Never intercept top-level navigation (Main Frame)
+                                     // to preserve native browser fingerprints on the portal.
+                                     if (request.isForMainFrame) return null
+
+                                     val isMirror = BrowserConstants.MIRROR_DOMAINS.any { url.contains(it, true) }
                                     
                                     if (isMirror && request.method == "GET") {
                                         try {

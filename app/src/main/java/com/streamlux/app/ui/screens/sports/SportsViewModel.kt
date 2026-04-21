@@ -14,7 +14,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SportsViewModel @Inject constructor(
-    private val sportsService: SportsService
+    private val sportsService: SportsService,
+    private val cacheManager: com.streamlux.app.data.local.SportsCacheManager
 ) : ViewModel() {
 
     private val _liveMatches = MutableStateFlow<List<SportsFixture>>(emptyList())
@@ -37,6 +38,11 @@ class SportsViewModel @Inject constructor(
     private val _ticker = MutableStateFlow(System.currentTimeMillis())
 
     init {
+        // Optimistically load cache first so offline users instantly see data
+        _liveMatches.value = cacheManager.getLiveMatches()
+        _upcomingMatches.value = cacheManager.getUpcomingMatches()
+        _highlights.value = cacheManager.getHighlights()
+        
         startPolling()
         viewModelScope.launch {
             while(true) {
@@ -52,57 +58,71 @@ class SportsViewModel @Inject constructor(
             while (true) {
                 _isLoading.value = true
                 
-                val liveTask = async { sportsService.getLiveMatches() }
-                val upcomingTask = async { sportsService.getUpcomingMatches() }
-                val highlightsTask = async { sportsService.getHighlights() }
-                
-                val now = System.currentTimeMillis()
-                val matchDurationMillis = 3 * 60 * 60 * 1000L
+                try {
+                    val rawLive = sportsService.getLiveMatches()
+                    val incomingUpcoming = sportsService.getUpcomingMatches()
+                    val newHighlights = sportsService.getHighlights()
 
-                val rawLive = liveTask.await()
-                val incomingUpcoming = upcomingTask.await()
-                
-                val allMatches = (rawLive + incomingUpcoming).distinctBy { it.id }
-                
-                val currentLive = mutableListOf<SportsFixture>()
-                val currentUpcoming = mutableListOf<SportsFixture>()
-                val currentFinished = mutableListOf<SportsFixture>()
+                    // Update Cache
+                    cacheManager.saveLiveMatches(rawLive)
+                    cacheManager.saveUpcomingMatches(incomingUpcoming)
+                    cacheManager.saveHighlights(newHighlights)
 
-                allMatches.forEach { fixture ->
-                    val kickoff = try {
-                        if (fixture.kickoffTime.contains("T")) {
-                            java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
-                        } else if (fixture.kickoffTime.contains("-")) {
-                            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                            sdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
-                        } else 0L
-                    } catch (e: Exception) { 0L }
-
-                    val isExpired = kickoff > 0 && (now - kickoff) >= matchDurationMillis
-                    val isLiveNow = (fixture.status == "live" || fixture.isLive) && !isExpired
-                    val hasStarted = kickoff > 0 && now >= kickoff && !isExpired
-
-                    if (isExpired) {
-                        // Gone forever after 3 hours
-                    } else if (isLiveNow || hasStarted) {
-                        currentLive.add(fixture.copy(status = "live", isLive = true))
-                    } else if (fixture.status == "finished") {
-                        currentFinished.add(fixture)
-                    } else {
-                        val countdownStr = if (kickoff > now) formatCountdown(kickoff - now) else null
-                        currentUpcoming.add(fixture.copy(countdown = countdownStr))
-                    }
+                    processMatches(rawLive, incomingUpcoming)
+                    _highlights.value = newHighlights
+                } catch (e: Exception) {
+                    // Network failed (e.g. Offline). Use cached data, but re-process to update countdowns/statuses
+                    android.util.Log.e("SportsVM", "Network fetch failed, using cache", e)
+                    val cachedLive = cacheManager.getLiveMatches()
+                    val cachedUpcoming = cacheManager.getUpcomingMatches()
+                    processMatches(cachedLive, cachedUpcoming)
                 }
-
-                _liveMatches.value = currentLive
-                _upcomingMatches.value = currentUpcoming
-                _finishedMatches.value = currentFinished
-                _highlights.value = highlightsTask.await()
                 
                 _isLoading.value = false
                 kotlinx.coroutines.delay(45000)
             }
         }
+    }
+
+    private fun processMatches(rawLive: List<SportsFixture>, incomingUpcoming: List<SportsFixture>) {
+        val now = System.currentTimeMillis()
+        val matchDurationMillis = 3 * 60 * 60 * 1000L
+        
+        val allMatches = (rawLive + incomingUpcoming).distinctBy { it.id }
+        
+        val currentLive = mutableListOf<SportsFixture>()
+        val currentUpcoming = mutableListOf<SportsFixture>()
+        val currentFinished = mutableListOf<SportsFixture>()
+
+        allMatches.forEach { fixture ->
+            val kickoff = try {
+                if (fixture.kickoffTime.contains("T")) {
+                    java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
+                } else if (fixture.kickoffTime.contains("-")) {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    sdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
+                } else 0L
+            } catch (e: Exception) { 0L }
+
+            val isExpired = kickoff > 0 && (now - kickoff) >= matchDurationMillis
+            val isLiveNow = (fixture.status == "live" || fixture.isLive) && !isExpired
+            val hasStarted = kickoff > 0 && now >= kickoff && !isExpired
+
+            if (isExpired) {
+                // Gone forever after 3 hours
+            } else if (isLiveNow || hasStarted) {
+                currentLive.add(fixture.copy(status = "live", isLive = true))
+            } else if (fixture.status == "finished") {
+                currentFinished.add(fixture)
+            } else {
+                val countdownStr = if (kickoff > now) formatCountdown(kickoff - now) else null
+                currentUpcoming.add(fixture.copy(countdown = countdownStr))
+            }
+        }
+
+        _liveMatches.value = currentLive
+        _upcomingMatches.value = currentUpcoming
+        _finishedMatches.value = currentFinished
     }
 
     private fun formatCountdown(diff: Long): String {

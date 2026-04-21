@@ -41,17 +41,45 @@ class MediaDetailViewModel @Inject constructor(
     private val _isBookmarked = MutableStateFlow(false)
     val isBookmarked: StateFlow<Boolean> = _isBookmarked
 
+    private val _downloadedItem = MutableStateFlow<com.streamlux.app.data.local.LibraryEntity?>(null)
+    val downloadedItem: StateFlow<com.streamlux.app.data.local.LibraryEntity?> = _downloadedItem
+
+    private val _downloadedEpisodes = MutableStateFlow<List<com.streamlux.app.data.local.LibraryEntity>>(emptyList())
+    val downloadedEpisodes: StateFlow<List<com.streamlux.app.data.local.LibraryEntity>> = _downloadedEpisodes
+
     init {
         fetchFullDetail()
         fetchComments()
         checkBookmarkStatus()
-        addToHistory()
+        checkDownloadStatus()
     }
 
     private fun checkBookmarkStatus() {
         viewModelScope.launch {
-            val item = libraryDao.getItemById(mediaId)
-            _isBookmarked.value = item?.isWatchlist == true
+            try {
+                val item = libraryDao.getItemByMediaId(mediaId)
+                _isBookmarked.value = item?.isWatchlist == true
+            } catch (e: Exception) {
+                Log.e("MediaDetailVM", "Error checking bookmark: ${e.message}")
+            }
+        }
+    }
+
+    private fun checkDownloadStatus() {
+        viewModelScope.launch {
+            try {
+                // Tracking all episodes for ticks on individual episode list
+                libraryDao.getEpisodesForShow(mediaId).collect { episodes ->
+                    _downloadedEpisodes.value = episodes
+                    
+                    // Specific tracker for the "Play" button (usually the latest selected or s1e1)
+                    _downloadedItem.value = episodes.find { 
+                        if (mediaType == "movie") true else it.seasonNumber == _selectedSeason.value && it.episodeNumber == 1
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MediaDetailVM", "Error checking download status: ${e.message}")
+            }
         }
     }
 
@@ -82,6 +110,7 @@ class MediaDetailViewModel @Inject constructor(
                 // Also update local Room for offline access
                 libraryDao.insertItem(
                     com.streamlux.app.data.local.LibraryEntity(
+                        id = mediaId,
                         mediaId = mediaId,
                         mediaType = mediaType,
                         title = info.displayTitle,
@@ -121,12 +150,13 @@ class MediaDetailViewModel @Inject constructor(
                 _isBookmarked.value = !_isBookmarked.value
                 
                 // Update local Room
-                val current = libraryDao.getItemById(mediaId)
+                val current = libraryDao.getItemByMediaId(mediaId)
                 if (current != null) {
                     libraryDao.insertItem(current.copy(isWatchlist = _isBookmarked.value))
                 } else {
                     libraryDao.insertItem(
                         com.streamlux.app.data.local.LibraryEntity(
+                            id = mediaId,
                             mediaId = mediaId,
                             mediaType = mediaType,
                             title = info.displayTitle,
@@ -137,6 +167,50 @@ class MediaDetailViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e("MediaDetailVM", "Firestore bookmark sync failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Called when the user starts a download from the WebView portal */
+    fun onDownloadStarted(
+        systemDownloadId: Long, 
+        quality: String, 
+        season: Int? = null, 
+        episode: Int? = null,
+        episodeName: String? = null,
+        episodeStillPath: String? = null
+    ) {
+        val info = _filmInfo.value?.detail ?: return
+        viewModelScope.launch {
+            try {
+                val uniqueId = if (mediaType == "tv" && season != null && episode != null) {
+                    "${mediaId}_s${season}_e${episode}"
+                } else {
+                    mediaId
+                }
+
+                val downloadItem = com.streamlux.app.data.local.LibraryEntity(
+                    id = uniqueId,
+                    mediaId = mediaId,
+                    mediaType = mediaType,
+                    title = if (mediaType == "tv") "${info.displayTitle} S${season} E${episode}" else info.displayTitle,
+                    posterPath = info.posterPath,
+                    isDownload = true,
+                    downloadStatus = "downloading",
+                    downloadProgress = 0,
+                    downloadQuality = quality,
+                    systemDownloadId = systemDownloadId,
+                    parentId = if (mediaType == "tv") mediaId else null,
+                    seriesTitle = if (mediaType == "tv") info.displayTitle else null,
+                    seasonNumber = season,
+                    episodeNumber = episode,
+                    episodeName = episodeName,
+                    episodeStillPath = episodeStillPath,
+                    timestamp = System.currentTimeMillis()
+                )
+                libraryDao.insertItem(downloadItem)
+            } catch (e: Exception) {
+                Log.e("MediaDetailVM", "Failed to record download: ${e.message}")
             }
         }
     }
@@ -204,6 +278,9 @@ class MediaDetailViewModel @Inject constructor(
             try {
                 val res = tmdbApi.fetchSeasonDetail("/tv/$mediaId/season/$seasonNum")
                 _seasonEpisodes.value = res.episodes ?: emptyList()
+                
+                // Refresh download status for the new season's first episode
+                checkDownloadStatus()
             } catch (e: Exception) {
                 Log.e("MediaDetailViewModel", "Error fetching season $seasonNum", e)
                 _seasonEpisodes.value = emptyList()

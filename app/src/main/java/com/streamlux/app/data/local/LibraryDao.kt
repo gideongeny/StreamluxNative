@@ -18,7 +18,13 @@ interface LibraryDao {
     fun getDownloads(): Flow<List<LibraryEntity>>
 
     @Query("SELECT * FROM library_items WHERE mediaId = :mediaId LIMIT 1")
-    suspend fun getItemById(mediaId: String): LibraryEntity?
+    suspend fun getItemByMediaId(mediaId: String): LibraryEntity?
+
+    @Query("SELECT * FROM library_items WHERE systemDownloadId = :downloadId LIMIT 1")
+    suspend fun getItemByDownloadId(downloadId: Long): LibraryEntity?
+
+    @Query("SELECT * FROM library_items WHERE parentId = :parentId AND isDownload = 1 ORDER BY seasonNumber ASC, episodeNumber ASC")
+    fun getEpisodesForShow(parentId: String): Flow<List<LibraryEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItem(item: LibraryEntity)
@@ -26,6 +32,6 @@ interface LibraryDao {
     @Delete
     suspend fun deleteItem(item: LibraryEntity)
 
-    @Query("DELETE FROM library_items WHERE mediaId = :mediaId AND isDownload = 1")
-    suspend fun deleteDownloadById(mediaId: String)
+    @Query("DELETE FROM library_items WHERE id = :id AND isDownload = 1")
+    suspend fun deleteDownloadById(id: String)
 }

@@ -98,11 +98,16 @@ fun StreamLuxApp() {
 
                 composable(
                     route = "library?tab={tab}",
-                    arguments = listOf(navArgument("tab") { type = NavType.StringType; defaultValue = "Watchlist" })
+                    arguments = listOf(navArgument("tab") { type = NavType.StringType; defaultValue = "Downloads" })
                 ) { backStackEntry ->
-                    val tab = backStackEntry.arguments?.getString("tab") ?: "Watchlist"
+                    val tab = backStackEntry.arguments?.getString("tab") ?: "Downloads"
                     com.streamlux.app.ui.screens.library.LibraryScreen(
                         onNavigateToDetail = { id, type -> navController.navigate("detail/$type/$id") },
+                        onNavigateToPlayer = { id, type, s, e, title, poster ->
+                            val safeTitle = android.net.Uri.encode(title)
+                            val safePoster = android.net.Uri.encode(poster.ifEmpty { "null" })
+                            navController.navigate("player/$type/$id?season=$s&episode=$e&title=$safeTitle&poster=$safePoster")
+                        },
                         initialTab = tab
                     )
                 }

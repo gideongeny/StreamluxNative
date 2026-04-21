@@ -1,5 +1,9 @@
 package com.streamlux.app.ui.screens.player
 
+import android.app.Application
+import android.app.DownloadManager
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.streamlux.app.utils.GenericUrlFactory
@@ -15,6 +19,7 @@ data class ServerSource(val name: String, val url: String)
 @HiltViewModel
 class VideoPlayerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
+    private val application: Application,
     private val urlFactory: com.streamlux.app.utils.GenericUrlFactory,
     private val libraryDao: com.streamlux.app.data.local.LibraryDao,
     private val firestore: com.google.firebase.firestore.FirebaseFirestore,
@@ -32,9 +37,50 @@ class VideoPlayerViewModel @Inject constructor(
     private val _currentServer = MutableStateFlow<ServerSource?>(null)
     val currentServer: StateFlow<ServerSource?> = _currentServer
 
+    private val _isOfflineFile = MutableStateFlow(false)
+    val isOfflineFile: StateFlow<Boolean> = _isOfflineFile
+
+    private val _localUri = MutableStateFlow<String?>(null)
+    val localUri: StateFlow<String?> = _localUri
+
+    private val _systemDownloadId = MutableStateFlow<Long?>(null)
+    val systemDownloadId: StateFlow<Long?> = _systemDownloadId
+
     init {
+        checkOfflineStatus()
         generateSources()
         addToHistory()
+    }
+
+    private fun checkOfflineStatus() {
+        viewModelScope.launch {
+            try {
+                val uniqueId = if (mediaType == "tv") "${mediaId}_s${season}_e${episode}" else mediaId
+                val actualItem = libraryDao.getItemByMediaId(uniqueId) ?: libraryDao.getItemByMediaId(mediaId)
+
+                if (actualItem?.downloadStatus == "completed" && actualItem.systemDownloadId != null) {
+                    // PRIMARY: Use DownloadManager to get a secure content:// URI
+                    // This bypasses Android Scoped Storage restrictions that block file:// URIs
+                    val dm = application.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                    val secureUri: Uri? = dm.getUriForDownloadedFile(actualItem.systemDownloadId!!)
+                    
+                    if (secureUri != null) {
+                        _localUri.value = secureUri.toString()
+                        _systemDownloadId.value = actualItem.systemDownloadId
+                        _isOfflineFile.value = true
+                        android.util.Log.d("StreamLuxPlayer", "Offline: secure URI resolved via DownloadManager")
+                    } else if (actualItem.localUri != null) {
+                        // FALLBACK: Use stored URI (may work on older Android versions)
+                        _localUri.value = actualItem.localUri
+                        _systemDownloadId.value = actualItem.systemDownloadId
+                        _isOfflineFile.value = true
+                        android.util.Log.w("StreamLuxPlayer", "Offline: falling back to raw URI")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("StreamLuxPlayer", "Offline check failed: ${e.message}")
+            }
+        }
     }
 
     private fun addToHistory() {
@@ -61,16 +107,22 @@ class VideoPlayerViewModel @Inject constructor(
                     .set(historyItem)
                     
                 // Local Sync: Room for offline library access
-                libraryDao.insertItem(
-                    com.streamlux.app.data.local.LibraryEntity(
-                        mediaId = mediaId,
-                        mediaType = mediaType,
-                        title = title,
-                        posterPath = poster,
-                        isHistory = true,
-                        timestamp = System.currentTimeMillis()
+                val existingItem = libraryDao.getItemByMediaId(mediaId)
+                if (existingItem != null) {
+                    libraryDao.insertItem(existingItem.copy(isHistory = true, timestamp = System.currentTimeMillis()))
+                } else {
+                    libraryDao.insertItem(
+                        com.streamlux.app.data.local.LibraryEntity(
+                            id = mediaId,
+                            mediaId = mediaId,
+                            mediaType = mediaType,
+                            title = title,
+                            posterPath = poster,
+                            isHistory = true,
+                            timestamp = System.currentTimeMillis()
+                        )
                     )
-                )
+                }
                 android.util.Log.d("VideoPlayerVM", "Instant History Registered: $title")
             } catch (e: Exception) {
                 android.util.Log.e("VideoPlayerVM", "History registration failed: ${e.message}")
@@ -78,7 +130,7 @@ class VideoPlayerViewModel @Inject constructor(
         }
     }
 
-    private fun generateSources() {
+    fun generateSources() {
         if (mediaType == "movie" || mediaType == "tv") {
             _currentServer.value = ServerSource("Default", urlFactory.create(mediaId, season, episode, mediaType, "SERVER_A"))
         } else if (mediaType == "youtube" || mediaType == "trailer") {

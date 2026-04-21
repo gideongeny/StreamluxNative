@@ -4,7 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import com.streamlux.app.data.local.LibraryDao
 import com.streamlux.app.data.local.LibraryDatabase
-import com.streamlux.app.data.local.MIGRATION_3_4
+import com.streamlux.app.data.local.MIGRATION_4_5
+import com.streamlux.app.data.local.MIGRATION_5_6
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,7 +24,10 @@ object DatabaseModule {
             context,
             LibraryDatabase::class.java,
             "streamlux_library.db"
-        ).addMigrations(MIGRATION_3_4).build()
+        )
+        .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+        .fallbackToDestructiveMigration()
+        .build()
     }
 
     @Provides

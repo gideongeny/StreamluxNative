@@ -12,11 +12,17 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import android.app.DownloadManager
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val dao: LibraryDao,
     private val firestore: com.google.firebase.firestore.FirebaseFirestore,
-    private val auth: com.google.firebase.auth.FirebaseAuth
+    private val auth: com.google.firebase.auth.FirebaseAuth,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _watchlist = MutableStateFlow<List<LibraryEntity>>(emptyList())
@@ -34,6 +40,54 @@ class LibraryViewModel @Inject constructor(
     init {
         fetchFromLocal()
         fetchFromFirestore()
+        startProgressPolling()
+    }
+
+    private fun startProgressPolling() {
+        viewModelScope.launch {
+            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            while (true) {
+                val activeDownloads = _downloads.value.filter { 
+                    it.downloadStatus == "downloading" || it.downloadStatus == "queued" 
+                }
+                
+                if (activeDownloads.isNotEmpty()) {
+                    activeDownloads.forEach { item ->
+                        val downloadId = item.systemDownloadId ?: return@forEach
+                        val query = DownloadManager.Query().setFilterById(downloadId)
+                        val cursor = dm.query(query)
+                        if (cursor.moveToFirst()) {
+                            val bytesSoFar = cursor.getLong(cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                            val totalBytes = cursor.getLong(cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                            val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
+                            
+                            val progress = if (totalBytes > 0) ((bytesSoFar * 100) / totalBytes).toInt() else 0
+                            
+                            // Map DM status to our status
+                            val newStatus = when(status) {
+                                DownloadManager.STATUS_RUNNING -> "downloading"
+                                DownloadManager.STATUS_PENDING -> "queued"
+                                DownloadManager.STATUS_PAUSED -> "paused"
+                                DownloadManager.STATUS_SUCCESSFUL -> "completed"
+                                DownloadManager.STATUS_FAILED -> "failed"
+                                else -> item.downloadStatus
+                            }
+
+                            if (progress != item.downloadProgress || newStatus != item.downloadStatus) {
+                                dao.insertItem(item.copy(
+                                    downloadProgress = progress,
+                                    downloadStatus = newStatus,
+                                    downloadedBytes = bytesSoFar,
+                                    downloadTotalBytes = totalBytes
+                                ))
+                            }
+                        }
+                        cursor.close()
+                    }
+                }
+                delay(1500) // Poll every 1.5 seconds
+            }
+        }
     }
 
     private fun fetchFromLocal() {
@@ -71,6 +125,7 @@ class LibraryViewModel @Inject constructor(
                 }
                 val remoteItems = snapshot?.documents?.mapNotNull { doc ->
                     LibraryEntity(
+                        id = doc.id,
                         mediaId = doc.id,
                         mediaType = doc.getString("type") ?: "movie",
                         title = doc.getString("title") ?: "Unknown",
@@ -96,8 +151,10 @@ class LibraryViewModel @Inject constructor(
                 if (e != null) return@addSnapshotListener
                 val bookmarks = snapshot?.get("bookmarks") as? List<Map<String, Any>> ?: emptyList()
                 val remoteWatchlist = bookmarks.map { map ->
+                    val mid = map["id"]?.toString() ?: ""
                     LibraryEntity(
-                        mediaId = map["id"]?.toString() ?: "",
+                        id = mid,
+                        mediaId = mid,
                         mediaType = map["media_type"]?.toString() ?: "movie",
                         title = map["title"]?.toString() ?: "Unknown",
                         posterPath = map["poster_path"]?.toString(),
@@ -128,10 +185,10 @@ class LibraryViewModel @Inject constructor(
                 }
 
                 val remoteDownloads = snapshot?.documents?.mapNotNull { doc ->
-                    val mediaId = doc.getString("id") ?: return@mapNotNull null
                     LibraryEntity(
-                        mediaId = mediaId,
-                        mediaType = doc.getString("type") ?: "movie",
+                        id = doc.id,
+                        mediaId = doc.getString("mediaId") ?: "",
+                        mediaType = doc.getString("mediaType") ?: "movie",
                         title = doc.getString("title") ?: "Unknown",
                         posterPath = doc.getString("thumbnail"),
                         isDownload = true,
@@ -140,24 +197,27 @@ class LibraryViewModel @Inject constructor(
                         downloadQuality = doc.getString("quality"),
                         downloadTotalBytes = doc.getLong("totalBytes") ?: 0L,
                         downloadedBytes = doc.getLong("downloadedBytes") ?: 0L,
+                        systemDownloadId = doc.getLong("systemId"),
+                        parentId = doc.getString("parentId"),
+                        seriesTitle = doc.getString("seriesTitle"),
+                        seasonNumber = doc.getLong("season")?.toInt(),
+                        episodeNumber = doc.getLong("episode")?.toInt(),
                         timestamp = doc.getLong("addedAt") ?: System.currentTimeMillis()
                     )
                 } ?: emptyList()
 
                 // Upsert each remote download into local Room DB for offline access
+                // The UI will reactively update via the Room Flow in fetchFromLocal()
                 viewModelScope.launch {
                     remoteDownloads.forEach { dao.insertItem(it) }
                 }
-
-                // Update the UI state immediately with the cloud data (fast path)
-                _downloads.value = remoteDownloads
             }
     }
 
     /** Remove a download entry (called from UI on swipe-to-delete). */
     fun deleteDownload(item: LibraryEntity) {
         viewModelScope.launch {
-            dao.deleteDownloadById(item.mediaId)
+            dao.deleteDownloadById(item.id)
         }
     }
 }

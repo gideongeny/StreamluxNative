@@ -43,9 +43,10 @@ class BlobDownloadInterface(private val context: Context) {
 }
 
 object BrowserConstants {
-    const val DESKTOP_CHROME_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    const val DESKTOP_CHROME_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     
     val MIRROR_DOMAINS = listOf(
-        "vidvault", "videasy", "vidsrc", "vidplay", "2embed", "dl.", "storage"
+        "vidvault", "videasy", "vixcloud", "filemoon", "streamtape", 
+        "rabbitstream", "megacloud", "streamwish", "voe.sx", "dood."
     )
 }
