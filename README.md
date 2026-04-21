@@ -53,4 +53,4 @@ The APK will be located in `app/build/outputs/apk/release/`.
 StreamLux Native is provided as a "Clean Shell" application. It does not contain hardcoded copyrighted streams. All content is fetched dynamically via user-provided or remote JSON configurations.
 
 ---
-*Created with ❤️ by Gideon Geny*
+*Created with ❤️ by Gideon Ngeny*
