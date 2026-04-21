@@ -35,6 +35,10 @@ import com.streamlux.app.data.model.TmdbItem
 import com.streamlux.app.ui.theme.BackgroundDark
 import com.streamlux.app.ui.theme.PrimaryOrange
 import com.streamlux.app.ui.components.GeniusAIChatbot
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.platform.LocalConfiguration
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -179,8 +183,13 @@ fun SearchScreen(
     }
 }
 
+
+
 @Composable
 fun SearchSection(title: String, items: List<TmdbItem>, onItemClick: (Int) -> Unit) {
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp > 600
+
     Column(modifier = Modifier.padding(vertical = 16.dp)) {
         Text(
             text = title,
@@ -190,22 +199,36 @@ fun SearchSection(title: String, items: List<TmdbItem>, onItemClick: (Int) -> Un
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
         
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(items) { item ->
-                SearchItem(item, onItemClick)
+        if (isTablet) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 130.dp),
+                modifier = Modifier.heightIn(max = 1000.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(items) { item ->
+                    SearchItem(item, onItemClick, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        } else {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(items) { item ->
+                    SearchItem(item, onItemClick)
+                }
             }
         }
     }
 }
 
 @Composable
-fun SearchItem(item: TmdbItem, onClick: (Int) -> Unit) {
+fun SearchItem(item: TmdbItem, onClick: (Int) -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
-            .width(120.dp)
+        modifier = modifier
+            .widthIn(max = 140.dp)
             .clickable { onClick(item.id) }
     ) {
         AsyncImage(

@@ -129,18 +129,22 @@ fun LibraryScreen(
                             Text("No items found in $selectedTab.", color = Color.Gray)
                         }
                     } else {
+                        val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+                        val isTablet = configuration.screenWidthDp > 600
+
                         LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
+                            columns = if (isTablet) GridCells.Adaptive(minSize = 130.dp) else GridCells.Fixed(3),
                             contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(currentList) { item ->
                                 Box(
                                     modifier = Modifier
+                                        .fillMaxWidth()
                                         .aspectRatio(2f / 3f)
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f))
                                         .clickable { onNavigateToDetail(item.mediaId, item.mediaType) }
                                 ) {

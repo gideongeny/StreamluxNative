@@ -14,6 +14,8 @@ import com.streamlux.app.ads.AdManager
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import com.streamlux.app.ui.main.MainViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -24,6 +26,7 @@ class MainActivity : ComponentActivity() {
     }
     
     private val viewModel: MainViewModel by viewModels()
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -38,13 +41,14 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isNightMode by viewModel.isNightMode.collectAsState()
+            val windowSizeClass = calculateWindowSizeClass(this)
             
             com.streamlux.app.ui.theme.StreamLuxTheme(darkTheme = isNightMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    com.streamlux.app.ui.navigation.StreamLuxApp()
+                    com.streamlux.app.ui.navigation.StreamLuxApp(windowSizeClass = windowSizeClass)
                 }
             }
         }

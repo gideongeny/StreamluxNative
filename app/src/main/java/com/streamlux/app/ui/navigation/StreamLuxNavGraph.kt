@@ -20,6 +20,9 @@ import com.streamlux.app.ui.screens.explore.ExploreScreen
 import com.streamlux.app.ui.screens.home.HomeScreen
 import com.streamlux.app.ui.screens.profile.ProfileScreen
 import com.streamlux.app.ui.screens.sports.SportsScreen
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import com.streamlux.app.ui.navigation.StreamLuxNavigation
 
 enum class Screen(val route: String) {
     Home("home"),
@@ -34,18 +37,21 @@ enum class Screen(val route: String) {
     Library("library?tab={tab}")
 }
 
+
+
 @Composable
-fun StreamLuxApp() {
+fun StreamLuxApp(windowSizeClass: WindowSizeClass) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // Hide chatbot & banner on full-screen player screen
+    // Use side rail for tablets/laptops (Medium or Expanded)
+    val isExpanded = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
     val isPlayerScreen = currentRoute?.startsWith("player") == true
 
     Scaffold(
         bottomBar = {
-            if (!isPlayerScreen) {
+            if (!isPlayerScreen && !isExpanded) {
                 Column {
                     BannerAd()
                     MobileBottomNav(navController = navController)
@@ -53,12 +59,15 @@ fun StreamLuxApp() {
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-
+        StreamLuxNavigation(
+            navController = navController,
+            isExpanded = isExpanded && !isPlayerScreen,
+            modifier = Modifier.padding(innerPadding)
+        ) {
             NavHost(
                 navController = navController,
                 startDestination = Screen.Home.route,
-                modifier = Modifier.padding(innerPadding)
+                modifier = Modifier.fillMaxSize()
             ) {
                 composable(Screen.Home.route) {
                     HomeScreen(
