@@ -121,6 +121,7 @@ dependencies {
 
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("androidx.palette:palette-ktx:1.0.0")
 
     // Google Cast SDK
     implementation("com.google.android.gms:play-services-cast-framework:21.4.0")

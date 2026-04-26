@@ -61,6 +61,8 @@ import com.streamlux.app.ui.theme.BackgroundDark
 import com.streamlux.app.ui.theme.PrimaryOrange
 import com.streamlux.app.data.model.TmdbItem
 import com.streamlux.app.data.model.Episode
+import androidx.palette.graphics.Palette
+import coil.request.ImageRequest
 
 @Composable
 fun DetailActions(
@@ -323,7 +325,24 @@ fun MediaDetailScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    var dominantColor by remember { mutableStateOf<Color?>(null) }
+    val bgColor = MaterialTheme.colorScheme.background
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                if (dominantColor != null) {
+                    Brush.verticalGradient(
+                        colors = listOf(dominantColor!!.copy(alpha = 0.3f), bgColor, bgColor),
+                        startY = 0f,
+                        endY = Float.POSITIVE_INFINITY
+                    )
+                } else {
+                    androidx.compose.ui.graphics.SolidColor(bgColor)
+                }
+            )
+    ) {
         val configuration = androidx.compose.ui.platform.LocalConfiguration.current
         val isTablet = configuration.screenWidthDp > 600
 
@@ -334,8 +353,26 @@ fun MediaDetailScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(24.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f/3f).clip(RoundedCornerShape(16.dp))) {
+                        val imageRequest = ImageRequest.Builder(LocalContext.current)
+                            .data("https://image.tmdb.org/t/p/w780${item.posterPath}")
+                            .crossfade(true)
+                            .allowHardware(false)
+                            .listener(
+                                onSuccess = { _, result ->
+                                    val bitmap = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                                    bitmap?.let { b ->
+                                        Palette.from(b).generate { palette ->
+                                            palette?.dominantSwatch?.rgb?.let { colorValue ->
+                                                dominantColor = Color(colorValue)
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                            .build()
+
                         AsyncImage(
-                            model = "https://image.tmdb.org/t/p/w780${item.posterPath}",
+                            model = imageRequest,
                             contentDescription = item.displayTitle,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -381,8 +418,26 @@ fun MediaDetailScreen(
             // MOBILE LAYOUT
             Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 60.dp)) {
                 Box(modifier = Modifier.fillMaxWidth().height(350.dp)) {
+                    val imageRequestMobile = ImageRequest.Builder(LocalContext.current)
+                        .data("https://image.tmdb.org/t/p/w1280${item.backdropPath ?: item.posterPath}")
+                        .crossfade(true)
+                        .allowHardware(false)
+                        .listener(
+                            onSuccess = { _, result ->
+                                val bitmap = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                                bitmap?.let { b ->
+                                    Palette.from(b).generate { palette ->
+                                        palette?.dominantSwatch?.rgb?.let { colorValue ->
+                                            dominantColor = Color(colorValue)
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                        .build()
+
                     AsyncImage(
-                        model = "https://image.tmdb.org/t/p/w1280${item.backdropPath ?: item.posterPath}",
+                        model = imageRequestMobile,
                         contentDescription = item.displayTitle,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
