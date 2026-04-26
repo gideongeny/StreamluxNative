@@ -34,14 +34,6 @@ class MusicViewModel @Inject constructor(
         "Electronic Dance", "K-Pop Top Hits", "Alternative Rock", "Chill Lo-Fi", "Country Anthems"
     )
 
-    private val youtubeKeys = listOf(
-        com.streamlux.app.utils.Constants.YOUTUBE_API_KEY_1,
-        com.streamlux.app.utils.Constants.YOUTUBE_API_KEY_2,
-        com.streamlux.app.utils.Constants.YOUTUBE_API_KEY_3,
-        com.streamlux.app.utils.Constants.YOUTUBE_API_KEY_4
-    )
-    private var currentKeyIndex = 0
-
     init {
         loadTrending()
     }
@@ -62,29 +54,8 @@ class MusicViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             
-            // Parallel Search
             val saavnResults = musicService.search(query)
-            var ytResults = emptyList<MusicTrack>()
-            
-            // YouTube Search with Rotation
-            for (i in 0 until youtubeKeys.size) {
-                val keyIndex = (currentKeyIndex + i) % youtubeKeys.size
-                try {
-                    ytResults = musicService.searchYouTube(query, youtubeKeys[keyIndex])
-                    currentKeyIndex = keyIndex // Keep using the successful key
-                    break
-                } catch (e: Exception) {
-                    if (e.message == "QUOTA_EXCEEDED") {
-                        continue // Try next key
-                    } else {
-                        break // Other error
-                    }
-                }
-            }
-            
-            // Merge results (YouTube first for visual confirmation, then Saavn)
-            val merged = (ytResults + saavnResults).distinctBy { it.id }
-            _searchResults.value = merged
+            _searchResults.value = saavnResults.distinctBy { it.id }
             
             _isLoading.value = false
         }
@@ -92,15 +63,7 @@ class MusicViewModel @Inject constructor(
 
     fun playTrack(track: MusicTrack) {
         viewModelScope.launch {
-            var trackToPlay = track
-            // If YouTube source, resolve the direct stream URL if it's currently just the ID
-            if (track.source == "youtube" && (track.streamUrl == null || track.streamUrl == track.id)) {
-                val resolvedUrl = musicService.resolveYouTubeStream(track.id)
-                if (resolvedUrl != null) {
-                    trackToPlay = track.copy(streamUrl = resolvedUrl)
-                }
-            }
-            playerManager.playTrack(trackToPlay)
+            playerManager.playTrack(track)
         }
     }
 

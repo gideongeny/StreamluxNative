@@ -11,14 +11,9 @@ import javax.inject.Singleton
 
 @Singleton
 class MusicService @Inject constructor(
-    private val client: OkHttpClient,
-    private val pipedService: PipedService
+    private val client: OkHttpClient
 ) {
     private val GATEWAY_BASE = "https://us-central1-streamlux-67a84.cloudfunctions.net/gateway"
-
-    suspend fun resolveYouTubeStream(videoId: String): String? {
-        return pipedService.getStreamUrl(videoId)
-    }
 
     suspend fun getTrending(): List<MusicTrack> {
         return try {
@@ -142,73 +137,5 @@ class MusicService @Inject constructor(
         )
     }
 
-    suspend fun searchYouTube(query: String, apiKey: String? = null): List<MusicTrack> {
-        return try {
-            // Priority 1: Gateway Proxy
-            val request = Request.Builder()
-                .url("$GATEWAY_BASE/music/youtube/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                .build()
 
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    return parseYouTubeItems(response.body?.string() ?: "")
-                }
-                throw Exception("Gateway failed")
-            }
-        } catch (e: Exception) {
-            // Fallback: Direct API
-            if (apiKey != null) {
-                try {
-                    val url = "https://www.googleapis.com/youtube/v3/search?" +
-                            "part=snippet&type=video&videoCategoryId=10&videoEmbeddable=true&maxResults=20" +
-                            "&q=${java.net.URLEncoder.encode("Official Music Video $query", "UTF-8")}" +
-                            "&key=$apiKey"
-                    val request = Request.Builder().url(url).build()
-                    client.newCall(request).execute().use { response ->
-                        if (response.isSuccessful) {
-                            return parseYouTubeItems(response.body?.string() ?: "")
-                        }
-                    }
-                } catch (e2: Exception) {
-                    // Ignore and fall through to emptyList()
-                }
-            }
-            emptyList()
-        }
-    }
-
-    private fun parseYouTubeItems(json: String): List<MusicTrack> {
-        val tracks = mutableListOf<MusicTrack>()
-        try {
-            val root = JSONObject(json)
-            val items = when {
-                root.has("items") -> root.getJSONArray("items")
-                root.has("data") -> root.getJSONArray("data")
-                else -> JSONArray()
-            }
-            for (i in 0 until items.length()) {
-                val item = items.getJSONObject(i)
-                val videoId = if (item.has("id") && item.get("id") is JSONObject) {
-                    item.getJSONObject("id").optString("videoId")
-                } else item.optString("id")
-                
-                if (videoId.isEmpty()) continue
-                
-                val snippet = item.optJSONObject("snippet")
-                tracks.add(MusicTrack(
-                    id = videoId,
-                    title = snippet?.optString("title") ?: item.optString("title"),
-                    artist = snippet?.optString("channelTitle") ?: item.optString("artist", "YouTube Music"),
-                    thumbnail = snippet?.optJSONObject("thumbnails")?.optJSONObject("high")?.optString("url") 
-                                ?: item.optString("thumbnail", "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"),
-                    album = "YouTube Music",
-                    duration = null,
-                    streamUrl = videoId,
-                    source = "youtube"
-                ))
-            }
-        } catch (e: Exception) {}
-        return tracks
-    }
 }

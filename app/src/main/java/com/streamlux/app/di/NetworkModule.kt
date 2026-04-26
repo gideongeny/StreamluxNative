@@ -32,6 +32,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideSerpApiService(okHttpClient: OkHttpClient): com.streamlux.app.data.api.SerpApiService {
+        return Retrofit.Builder()
+            .baseUrl("https://streamlux.vercel.app/api/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(com.streamlux.app.data.api.SerpApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
     fun provideStreamLuxApi(okHttpClient: OkHttpClient): com.streamlux.app.data.api.StreamLuxApi {
         return Retrofit.Builder()
             .baseUrl("https://streamlux.vercel.app/api/")

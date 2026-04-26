@@ -276,6 +276,7 @@ fun VideoPlayerScreen(
             if (targetUrl.isNotBlank()) {
                 NativeHlsPlayer(
                     url = targetUrl,
+                    simpleCache = viewModel.simpleCache,
                     modifier = Modifier.fillMaxSize()
                 )
                 isLoaded = true

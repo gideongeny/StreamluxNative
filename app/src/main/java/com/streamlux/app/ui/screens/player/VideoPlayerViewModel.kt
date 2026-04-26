@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.media3.datasource.cache.SimpleCache
 
 data class ServerSource(val name: String, val url: String)
 
@@ -23,7 +24,8 @@ class VideoPlayerViewModel @Inject constructor(
     private val urlFactory: com.streamlux.app.utils.GenericUrlFactory,
     private val libraryDao: com.streamlux.app.data.local.LibraryDao,
     private val firestore: com.google.firebase.firestore.FirebaseFirestore,
-    private val auth: com.google.firebase.auth.FirebaseAuth
+    private val auth: com.google.firebase.auth.FirebaseAuth,
+    val simpleCache: SimpleCache
 ) : ViewModel() {
 
     val mediaType: String = savedStateHandle["type"] ?: "movie"

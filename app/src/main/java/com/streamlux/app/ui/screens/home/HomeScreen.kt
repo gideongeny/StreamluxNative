@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +25,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.scale
 import coil.compose.AsyncImage
 import com.streamlux.app.data.model.HomeSection
 import com.streamlux.app.data.model.TmdbItem
@@ -100,12 +104,14 @@ fun HomeScreen(
             ) {
                 TabButton(
                     title = "Movies",
+                    icon = "\uD83C\uDFAC",
                     isSelected = selectedTab == "Movies",
                     onClick = { selectedTab = "Movies" }
                 )
-                Spacer(modifier = Modifier.width(24.dp))
+                Spacer(modifier = Modifier.width(16.dp))
                 TabButton(
                     title = "TV Shows",
+                    icon = "\uD83D\uDCFA",
                     isSelected = selectedTab == "TV Shows",
                     onClick = { selectedTab = "TV Shows" }
                 )
@@ -118,10 +124,23 @@ fun HomeScreen(
             val trendingSection = currentData.find { it.title.contains("Trending", ignoreCase = true) }
             val scrollData = currentData.filter { it.title != trendingSection?.title }
 
+            val shortsData by viewModel.shortsData.collectAsState()
+
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 item {
                     if (trendingSection != null && trendingSection.items.isNotEmpty()) {
-                        HeroBanner(items = trendingSection.items, onMovieClick = { id -> onNavigateToDetail(id, mediaType) })
+                        HeroBanner(
+                            items = trendingSection.items, 
+                            onMovieClick = { id -> onNavigateToDetail(id, mediaType) },
+                            onPrefetch = { id -> viewModel.prefetchMedia(id, mediaType) }
+                        )
+                    }
+                }
+
+                // WORLD-CLASS: Vertical Shorts Feed (Aggregated via SerpApi)
+                if (shortsData.isNotEmpty()) {
+                    item {
+                        ShortsSectionRow(shortsData)
                     }
                 }
                 
@@ -129,7 +148,8 @@ fun HomeScreen(
                     HomeSectionRow(
                         section = section,
                         mediaType = mediaType,
-                        onMovieClick = { id -> onNavigateToDetail(id, mediaType) }
+                        onMovieClick = { id -> onNavigateToDetail(id, mediaType) },
+                        onPrefetch = { id -> viewModel.prefetchMedia(id, mediaType) }
                     )
                 }
                 
@@ -142,35 +162,126 @@ fun HomeScreen(
 }
 
 @Composable
-fun TabButton(title: String, isSelected: Boolean, onClick: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable { onClick() }
-    ) {
-        Text(
-            text = title,
-            color = if (isSelected) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
-        if (isSelected) {
-            Box(
-                modifier = Modifier
-                    .height(3.dp)
-                    .width(40.dp)
-                    .clip(RoundedCornerShape(1.5.dp))
-                    .background(PrimaryOrange)
+fun ShortsSectionRow(shorts: List<com.streamlux.app.data.model.ShortVideoItem>) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Column(modifier = Modifier.padding(vertical = 16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Discover Shorts",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Black
             )
+            Text(
+                text = "WORLDWIDE",
+                color = PrimaryOrange,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(shorts) { short ->
+                Column(
+                    modifier = Modifier
+                        .width(160.dp)
+                        .clickable {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(short.link))
+                            context.startActivity(intent)
+                        }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .height(240.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.DarkGray)
+                    ) {
+                        AsyncImage(
+                            model = short.thumbnail,
+                            contentDescription = short.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        
+                        // Source Badge
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                        ) {
+                            Text(
+                                text = short.source.uppercase(),
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        // Play Icon Overlay
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(40.dp).align(Alignment.Center)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = short.title,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
+fun TabButton(title: String, icon: String, isSelected: Boolean, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isSelected) PrimaryOrange.copy(alpha = 0.15f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Text(text = icon, fontSize = 16.sp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            color = if (isSelected) PrimaryOrange else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            fontSize = 15.sp
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
 fun HomeSectionRow(
     section: HomeSection,
     mediaType: String,
-    onMovieClick: (Int) -> Unit
+    onMovieClick: (Int) -> Unit,
+    onPrefetch: (Int) -> Unit
 ) {
     if (section.items.isNotEmpty()) {
         Column(modifier = Modifier.padding(vertical = 12.dp)) {
@@ -192,7 +303,10 @@ fun HomeSectionRow(
                             .height(175.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.DarkGray)
-                            .clickable { onMovieClick(item.id) }
+                            .combinedClickable(
+                                onClick = { onMovieClick(item.id) },
+                                onLongClick = { onPrefetch(item.id) }
+                            )
                     ) {
                         AsyncImage(
                             model = item.fullPosterUrl,
@@ -209,8 +323,15 @@ fun HomeSectionRow(
 
 @androidx.compose.foundation.ExperimentalFoundationApi
 @Composable
-fun HeroBanner(items: List<TmdbItem>, onMovieClick: (Int) -> Unit) {
+fun HeroBanner(items: List<TmdbItem>, onMovieClick: (Int) -> Unit, onPrefetch: (Int) -> Unit) {
     val pagerState = rememberPagerState(pageCount = { minOf(items.size, 5) })
+    
+    // Automatically prefetch the item that is currently centered in the Hero Banner
+    LaunchedEffect(pagerState.currentPage) {
+        if (items.isNotEmpty()) {
+            onPrefetch(items[pagerState.currentPage].id)
+        }
+    }
     
     LaunchedEffect(pagerState) {
         while (true) {
@@ -235,11 +356,22 @@ fun HeroBanner(items: List<TmdbItem>, onMovieClick: (Int) -> Unit) {
                 .fillMaxSize()
                 .clickable { onMovieClick(item.id) }
         ) {
+            // Ken Burns Effect
+            val infiniteTransition = rememberInfiniteTransition()
+            val scale by infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.15f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(15000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                )
+            )
+
             AsyncImage(
                 model = "https://image.tmdb.org/t/p/w1280${item.backdropPath ?: item.posterPath}",
                 contentDescription = item.displayTitle,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().scale(scale)
             )
             
             Box(
@@ -247,8 +379,8 @@ fun HeroBanner(items: List<TmdbItem>, onMovieClick: (Int) -> Unit) {
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, BackgroundDark),
-                            startY = 600f
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f), BackgroundDark),
+                            startY = 200f
                         )
                     )
             )

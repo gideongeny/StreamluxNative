@@ -16,10 +16,14 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.PlayerView
 
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.SimpleCache
+
 @OptIn(UnstableApi::class)
 @Composable
 fun NativeHlsPlayer(
     url: String,
+    simpleCache: SimpleCache?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -35,8 +39,17 @@ fun NativeHlsPlayer(
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
-            val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(url))
+            val mediaSourceFactory = if (simpleCache != null) {
+                val cacheDataSourceFactory = CacheDataSource.Factory()
+                    .setCache(simpleCache)
+                    .setUpstreamDataSourceFactory(dataSourceFactory)
+                    .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+                HlsMediaSource.Factory(cacheDataSourceFactory)
+            } else {
+                HlsMediaSource.Factory(dataSourceFactory)
+            }
+
+            val hlsMediaSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(url))
             
             setMediaSource(hlsMediaSource)
             prepare()

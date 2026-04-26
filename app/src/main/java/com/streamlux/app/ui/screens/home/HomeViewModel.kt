@@ -3,8 +3,11 @@ package com.streamlux.app.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.streamlux.app.data.api.SerpApiService
 import com.streamlux.app.data.api.TmdbApi
 import com.streamlux.app.data.model.HomeSection
+import com.streamlux.app.data.model.ShortVideoItem
+import com.streamlux.app.utils.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,6 +21,7 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val tmdbApi: TmdbApi,
+    private val serpApiService: SerpApiService,
     private val auth: FirebaseAuth
 ) : ViewModel() {
 
@@ -29,6 +33,10 @@ class HomeViewModel @Inject constructor(
 
     private val _tvData = MutableStateFlow<List<HomeSection>>(emptyList())
     val tvData: StateFlow<List<HomeSection>> = _tvData
+
+    private val _shortsData = MutableStateFlow<List<ShortVideoItem>>(emptyList())
+    val shortsData: StateFlow<List<ShortVideoItem>> = _shortsData
+
     private var moviesLoaded = false
     private var tvLoaded = false
 
@@ -39,6 +47,20 @@ class HomeViewModel @Inject constructor(
         }
         fetchMovies()
         fetchTvShows()
+        fetchShortVideos("trending movie trailers shorts")
+    }
+
+    private fun fetchShortVideos(query: String) {
+        viewModelScope.launch {
+            try {
+                val response = serpApiService.getShortVideos(
+                    query = query
+                )
+                _shortsData.value = response.shortVideos
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error fetching shorts", e)
+            }
+        }
     }
 
     private fun fetchMovies() {
@@ -182,6 +204,19 @@ class HomeViewModel @Inject constructor(
 
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error fetching TV Shows", e)
+            }
+        }
+    }
+
+    fun prefetchMedia(id: Int, mediaType: String) {
+        viewModelScope.launch {
+            try {
+                // By calling this, OkHttpClient will automatically cache the response.
+                // When the user actually navigates to the DetailScreen, the network request
+                // will instantly return from the local HTTP cache, creating a zero-latency experience.
+                tmdbApi.fetchDetail("/$mediaType/$id")
+            } catch (e: Exception) {
+                // Ignore prefetch errors
             }
         }
     }

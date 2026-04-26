@@ -14,6 +14,16 @@ import com.streamlux.app.ads.AdManager
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import android.content.Context
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import com.streamlux.app.ui.main.MainViewModel
@@ -43,12 +53,41 @@ class MainActivity : ComponentActivity() {
             val isNightMode by viewModel.isNightMode.collectAsState()
             val windowSizeClass = calculateWindowSizeClass(this)
             
+            // Play Store Compliance: UGC Disclaimer
+            val prefs = getSharedPreferences("streamlux_prefs", Context.MODE_PRIVATE)
+            var showDisclaimer by remember { mutableStateOf(prefs.getBoolean("show_ugc_disclaimer", true)) }
+            
             com.streamlux.app.ui.theme.StreamLuxTheme(darkTheme = isNightMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     com.streamlux.app.ui.navigation.StreamLuxApp(windowSizeClass = windowSizeClass)
+                    
+                    if (showDisclaimer) {
+                        AlertDialog(
+                            onDismissRequest = { /* Require explicit acceptance */ },
+                            title = { Text("Disclaimer", fontWeight = FontWeight.Bold) },
+                            text = { 
+                                Text("StreamLux is a media indexing tool and aggregator. We do not host any of the media files displayed in this app. All content is sourced from freely available third-party websites and user-generated uploads. By proceeding, you agree to our Terms of Service.") 
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    prefs.edit().putBoolean("show_ugc_disclaimer", false).apply()
+                                    showDisclaimer = false
+                                }) {
+                                    Text("I Agree")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = {
+                                    finishAffinity()
+                                }) {
+                                    Text("Exit")
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

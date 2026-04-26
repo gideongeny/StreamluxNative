@@ -36,6 +36,9 @@ object Constants {
     val YOUTUBE_API_KEY_2 = BuildConfig.YOUTUBE_API_KEY_2
     val YOUTUBE_API_KEY_3 = BuildConfig.YOUTUBE_API_KEY_3
     val YOUTUBE_API_KEY_4 = BuildConfig.YOUTUBE_API_KEY_4
+    
+    // SerpApi for Short Videos
+    const val SERP_API_KEY = "YOUR_SERPAPI_KEY" // Placeholder: User should update in local.properties
 
 
     // Video Embed Sources (exact formats from React app download.ts / resolver.ts)
