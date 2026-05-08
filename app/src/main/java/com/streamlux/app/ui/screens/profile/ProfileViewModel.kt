@@ -96,4 +96,16 @@ class ProfileViewModel @Inject constructor(
     fun signOut() {
         auth.signOut()
     }
+
+    fun deleteAccount(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                auth.currentUser?.delete()?.await()
+                onComplete(true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false)
+            }
+        }
+    }
 }

@@ -184,6 +184,93 @@ fun DetailActions(
 }
 
 @Composable
+fun CastSection(cast: List<com.streamlux.app.data.model.CastItem>) {
+    if (cast.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "CAST",
+            color = PrimaryOrange,
+            fontWeight = FontWeight.Black,
+            fontSize = 12.sp,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            items(cast) { member ->
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(80.dp)
+                ) {
+                    AsyncImage(
+                        model = member.fullProfileUrl,
+                        contentDescription = member.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(70.dp).clip(CircleShape).background(Color.DarkGray)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = member.name,
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SimilarSection(
+    similar: List<TmdbItem>,
+    onNavigateToDetail: (Int, String) -> Unit
+) {
+    if (similar.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "SIMILAR CONTENT",
+            color = PrimaryOrange,
+            fontWeight = FontWeight.Black,
+            fontSize = 12.sp,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(similar) { item ->
+                Column(
+                    modifier = Modifier
+                        .width(110.dp)
+                        .clickable { onNavigateToDetail(item.id, item.mediaType ?: "movie") }
+                ) {
+                    AsyncImage(
+                        model = item.fullPosterUrl,
+                        contentDescription = item.displayTitle,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.DarkGray)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = item.displayTitle,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun SeasonAndEpisodes(
     viewModel: MediaDetailViewModel,
     item: TmdbItem,
@@ -222,14 +309,18 @@ fun SeasonAndEpisodes(
 
         Spacer(modifier = Modifier.height(16.dp))
         
+        val currentDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             for (ep in seasonEpisodes) {
                 val episodeStatus = downloadedEpisodes.find { 
                     it.seasonNumber == selectedSeason && it.episodeNumber == ep.episodeNumber 
                 }
                 
+                val isUnreleased = ep.airDate != null && ep.airDate.isNotBlank() && ep.airDate > currentDate
+                
                 Row(
-                    modifier = Modifier.fillMaxWidth().clickable {
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = !isUnreleased) {
                         val encodedTitle = Uri.encode(item.displayTitle)
                         val encodedPoster = Uri.encode(item.posterPath ?: "null")
                         onNavigateToPlayer(
@@ -246,29 +337,60 @@ fun SeasonAndEpisodes(
                             modifier = Modifier.fillMaxSize()
                         )
                         Box(
-                            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)),
+                            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (isUnreleased) 0.6f else 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White)
+                            if (!isUnreleased) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White)
+                            } else {
+                                Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.Gray, modifier = Modifier.size(24.dp))
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "${ep.episodeNumber}. ${ep.name}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(text = ep.overview ?: "", color = Color.Gray, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            text = "${ep.episodeNumber}. ${ep.name}", 
+                            color = if (isUnreleased) Color.Gray else Color.White, 
+                            fontWeight = FontWeight.Bold, 
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = ep.overview?.takeIf { it.isNotBlank() } ?: if (isUnreleased) "Coming soon." else "No overview available.", 
+                            color = Color.Gray, 
+                            fontSize = 12.sp, 
+                            maxLines = 2, 
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                     
-                    IconButton(
-                        onClick = {
-                            if (episodeStatus?.downloadStatus != "completed") {
-                                onShowPortal("https://dl.vidsrc.vip/tv/${viewModel.mediaId}/$selectedSeason/${ep.episodeNumber}")
-                            }
+                    if (isUnreleased) {
+                        Surface(
+                            color = Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryOrange),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "SOON",
+                                color = PrimaryOrange,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
-                    ) {
-                        when (episodeStatus?.downloadStatus) {
-                            "completed" -> Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(24.dp))
-                            "downloading" -> CircularProgressIndicator(progress = (episodeStatus.downloadProgress ?: 0) / 100f, modifier = Modifier.size(20.dp), color = PrimaryOrange, strokeWidth = 2.dp)
-                            else -> Icon(Icons.Default.Download, null, tint = PrimaryOrange, modifier = Modifier.size(20.dp))
+                    } else {
+                        IconButton(
+                            onClick = {
+                                if (episodeStatus?.downloadStatus != "completed") {
+                                    onShowPortal("https://dl.vidsrc.vip/tv/${viewModel.mediaId}/$selectedSeason/${ep.episodeNumber}")
+                                }
+                            }
+                        ) {
+                            when (episodeStatus?.downloadStatus) {
+                                "completed" -> Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(24.dp))
+                                "downloading" -> CircularProgressIndicator(progress = (episodeStatus.downloadProgress ?: 0) / 100f, modifier = Modifier.size(20.dp), color = PrimaryOrange, strokeWidth = 2.dp)
+                                else -> Icon(Icons.Default.Download, null, tint = PrimaryOrange, modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
                 }
@@ -348,7 +470,7 @@ fun MediaDetailScreen(
 
         if (isTablet) {
             Row(modifier = Modifier.fillMaxSize().padding(bottom = 60.dp)) {
-                // LEFT COLUMN
+                // LEFT COLUMN: Poster
                 Column(
                     modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(24.dp)
                 ) {
@@ -378,15 +500,54 @@ fun MediaDetailScreen(
                             modifier = Modifier.fillMaxSize()
                         )
                     }
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(text = item.displayTitle, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Black)
-                    Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                }
+                // RIGHT COLUMN: Info & Actions
+                Column(
+                    modifier = Modifier.weight(1.5f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(24.dp)
+                ) {
+                    Text(
+                        text = item.displayTitle, 
+                        style = MaterialTheme.typography.headlineLarge, 
+                        color = MaterialTheme.colorScheme.onBackground, 
+                        fontWeight = FontWeight.Black,
+                        fontSize = 42.sp,
+                        lineHeight = 48.sp
+                    )
+                    
+                    Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         StarRating(rating = item.voteAverage ?: 0.0)
-                        item.runtime?.let { runtime ->
+                        Spacer(modifier = Modifier.width(16.dp))
+                        val releaseYear = (item.releaseDate ?: item.firstAirDate)?.split("-")?.firstOrNull() ?: ""
+                        if (releaseYear.isNotEmpty()) {
+                            Text(text = releaseYear, color = Color.Gray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.width(16.dp))
+                        }
+                        item.runtime?.let { runtime ->
                             Text(text = "${runtime / 60}h ${runtime % 60}m", color = Color.Gray, fontSize = 14.sp)
                         }
                     }
+
+                    if (!item.genres.isNullOrEmpty()) {
+                        Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item.genres.take(3).forEach { genre ->
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.05f),
+                                    shape = RoundedCornerShape(4.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                                ) {
+                                    Text(
+                                        text = genre.name.uppercase(),
+                                        color = Color.Gray,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        letterSpacing = 1.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(32.dp))
                     DetailActions(
                         viewModel = viewModel, item = item, isAvailableOffline = isAvailableOffline,
@@ -395,15 +556,14 @@ fun MediaDetailScreen(
                         onShowPortal = { url -> portalUrl = url; showVidVault = true },
                         selectedSeason = selectedSeason
                     )
-                }
-                // RIGHT COLUMN
-                Column(
-                    modifier = Modifier.weight(1.5f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(24.dp)
-                ) {
+
+                    Spacer(modifier = Modifier.height(40.dp))
                     Text(text = "OVERVIEW", color = PrimaryOrange, fontWeight = FontWeight.Black, fontSize = 12.sp, letterSpacing = 1.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(text = item.overview ?: "No overview available.", color = Color.LightGray, style = MaterialTheme.typography.bodyLarge, lineHeight = 28.sp)
                     
+                    CastSection(cast = filmInfo!!.credits)
+
                     if (viewModel.mediaType == "tv") {
                         SeasonAndEpisodes(
                             viewModel = viewModel, item = item, selectedSeason = selectedSeason,
@@ -412,6 +572,11 @@ fun MediaDetailScreen(
                             onShowPortal = { url -> portalUrl = url; showVidVault = true }
                         )
                     }
+
+                    SimilarSection(similar = filmInfo!!.similar, onNavigateToDetail = onNavigateToDetail)
+                    
+                    Spacer(modifier = Modifier.height(40.dp))
+                    SocialSection(viewModel, comments, onNavigateToAuth)
                 }
             }
         } else {
@@ -466,6 +631,8 @@ fun MediaDetailScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(text = item.overview ?: "No overview available.", color = Color.LightGray, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp)
                     
+                    CastSection(cast = filmInfo!!.credits)
+
                     if (viewModel.mediaType == "tv") {
                         SeasonAndEpisodes(
                             viewModel = viewModel, item = item, selectedSeason = selectedSeason,
@@ -474,6 +641,8 @@ fun MediaDetailScreen(
                             onShowPortal = { url -> portalUrl = url; showVidVault = true }
                         )
                     }
+
+                    SimilarSection(similar = filmInfo!!.similar, onNavigateToDetail = onNavigateToDetail)
                     
                     Spacer(modifier = Modifier.height(32.dp))
                     // Social / Comments

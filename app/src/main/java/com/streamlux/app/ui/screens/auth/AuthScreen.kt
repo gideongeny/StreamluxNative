@@ -110,12 +110,15 @@ fun AuthScreen(
                 }
             }
 
+            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+
             // Input Fields
             AuthTextField(
                 value = email,
                 onValueChange = { email = it },
                 placeholder = "Email Address",
-                icon = Icons.Default.Email
+                icon = Icons.Default.Email,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Next
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -127,7 +130,15 @@ fun AuthScreen(
                 icon = Icons.Default.Lock,
                 isPassword = true,
                 showPassword = showPassword,
-                onPasswordToggle = { showPassword = !showPassword }
+                onPasswordToggle = { showPassword = !showPassword },
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                onDone = {
+                    focusManager.clearFocus()
+                    if (email.isNotEmpty() && password.isNotEmpty()) {
+                        if (isSignIn) viewModel.signIn(email, password)
+                        else viewModel.signUp(email, password)
+                    }
+                }
             )
 
             if (isSignIn) {
@@ -148,6 +159,11 @@ fun AuthScreen(
             // Action Button
             Button(
                 onClick = {
+                    focusManager.clearFocus()
+                    if (email.isEmpty() || password.isEmpty()) {
+                        // Optional: Show local toast or error state
+                        return@Button
+                    }
                     if (isSignIn) viewModel.signIn(email, password)
                     else viewModel.signUp(email, password)
                 },
@@ -156,7 +172,7 @@ fun AuthScreen(
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryOrange),
                 shape = RoundedCornerShape(16.dp),
-                enabled = !isLoading
+                enabled = !isLoading && email.isNotEmpty() && password.isNotEmpty()
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
@@ -241,7 +257,9 @@ fun AuthTextField(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     isPassword: Boolean = false,
     showPassword: Boolean = false,
-    onPasswordToggle: (() -> Unit)? = null
+    onPasswordToggle: (() -> Unit)? = null,
+    imeAction: androidx.compose.ui.text.input.ImeAction = androidx.compose.ui.text.input.ImeAction.Next,
+    onDone: (() -> Unit)? = null
 ) {
     TextField(
         value = value,
@@ -271,6 +289,14 @@ fun AuthTextField(
         ),
         shape = RoundedCornerShape(16.dp),
         visualTransformation = if (isPassword && !showPassword) PasswordVisualTransformation() else VisualTransformation.None,
-        singleLine = true
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            imeAction = imeAction,
+            keyboardType = if (isPassword) androidx.compose.ui.text.input.KeyboardType.Password else androidx.compose.ui.text.input.KeyboardType.Email
+        ),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            onNext = { /* Auto handles focus next by default */ },
+            onDone = { onDone?.invoke() }
+        )
     )
 }

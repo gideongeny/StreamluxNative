@@ -18,8 +18,10 @@ data class TmdbItem(
     val runtime: Int? = null,
     @SerializedName("release_date") val releaseDate: String? = null,
     @SerializedName("first_air_date") val firstAirDate: String? = null,
+    val genres: List<Genre>? = null,
     val seasons: List<Season>? = null
 ) {
+    data class Genre(val id: Int, val name: String)
     val displayTitle: String get() = title ?: name ?: "Unknown"
     val fullPosterUrl: String get() = "https://image.tmdb.org/t/p/w500$posterPath"
 }

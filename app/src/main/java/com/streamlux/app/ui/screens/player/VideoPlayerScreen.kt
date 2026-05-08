@@ -2,6 +2,12 @@ package com.streamlux.app.ui.screens.player
 
 import android.annotation.SuppressLint
 import android.app.DownloadManager
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import kotlinx.coroutines.delay
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -230,8 +236,30 @@ fun VideoPlayerScreen(
         onNavigateBack()
     }
 
+    var showControls by remember { mutableStateOf(true) }
+    var controlsTimeoutTrigger by remember { mutableIntStateOf(0) }
+
+    // Auto-hide controls after 5 seconds
+    LaunchedEffect(showControls, controlsTimeoutTrigger) {
+        if (showControls) {
+            delay(5000)
+            showControls = false
+        }
+    }
+
     // ─── RENDER ──────────────────────────────────────────────────────────
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                showControls = !showControls
+                if (showControls) controlsTimeoutTrigger++
+            }
+    ) {
 
         val isLiveBypass = viewModel.mediaType == "live" || viewModel.mediaType == "sports"
         val targetUrl = currentServer?.url ?: ""
@@ -408,32 +436,41 @@ fun VideoPlayerScreen(
 
         // Overlay controls
         if (!isPiPMode) {
-            // Cast button (safe fallback if AppCompat context is missing)
-            AndroidView(
-                factory = { ctx ->
-                    try {
-                        MediaRouteButton(ctx).apply {
-                            CastButtonFactory.setUpMediaRouteButton(ctx.applicationContext, this)
-                        }
-                    } catch (e: Exception) {
-                        android.view.View(ctx)
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 40.dp, end = 12.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-            )
-
-            // Back button
-            IconButton(
-                onClick = { onNavigateBack() },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 40.dp, start = 12.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.fillMaxSize()
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Cast button (safe fallback if AppCompat context is missing)
+                    AndroidView(
+                        factory = { ctx ->
+                            try {
+                                MediaRouteButton(ctx).apply {
+                                    CastButtonFactory.setUpMediaRouteButton(ctx.applicationContext, this)
+                                }
+                            } catch (e: Exception) {
+                                android.view.View(ctx)
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 40.dp, end = 12.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    )
+
+                    // Back button
+                    IconButton(
+                        onClick = { onNavigateBack() },
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(top = 40.dp, start = 12.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    }
+                }
             }
         }
     }

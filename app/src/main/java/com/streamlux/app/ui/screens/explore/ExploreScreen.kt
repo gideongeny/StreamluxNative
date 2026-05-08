@@ -45,17 +45,10 @@ fun ExploreScreen(
     val activeCountry by viewModel.activeCountry.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     
-    val allChannels by viewModel.allChannels.collectAsState()
+    val filteredChannels by viewModel.filteredChannels.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val countries by viewModel.countries.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    
-    val filteredChannels = allChannels.filter { channel ->
-        val matchesCategory = activeCategory == "All" || channel.category == activeCategory
-        val matchesCountry = activeCountry == "All" || (channel.country ?: "Global") == activeCountry
-        val matchesSearch = channel.name.contains(searchQuery, ignoreCase = true)
-        matchesCategory && matchesCountry && matchesSearch
-    }
 
     Column(
         modifier = Modifier
@@ -130,15 +123,18 @@ fun ExploreScreen(
         ) {
             items(categories) { cat ->
                 val isSelected = activeCategory == cat
-                TextButton(
+                Surface(
                     onClick = { viewModel.setCategory(cat) },
-                    colors = ButtonDefaults.textButtonColors(
-                        containerColor = if (isSelected) PrimaryOrange else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
-                        contentColor = if (isSelected) Color.White else Color.Gray
-                    ),
+                    color = if (isSelected) PrimaryOrange else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
+                    contentColor = if (isSelected) Color.White else Color.Gray,
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(text = cat, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(
+                        text = cat, 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
             }
         }
@@ -150,15 +146,18 @@ fun ExploreScreen(
         ) {
             items(countries) { country ->
                 val isSelected = activeCountry == country
-                TextButton(
+                Surface(
                     onClick = { viewModel.setCountry(country) },
-                    colors = ButtonDefaults.textButtonColors(
-                        containerColor = if (isSelected) Color(0xFF4ADE80) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
-                        contentColor = if (isSelected) Color.White else Color.Gray
-                    ),
+                    color = if (isSelected) Color(0xFF4ADE80) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
+                    contentColor = if (isSelected) Color.White else Color.Gray,
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(text = country, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Text(
+                        text = country, 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
                 }
             }
         }

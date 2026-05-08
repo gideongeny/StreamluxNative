@@ -16,14 +16,14 @@ if (propertiesFile.exists()) {
 
 android {
     namespace = "com.streamlux.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.streamlux.app"
+        applicationId = "com.streamlux.app.mobile"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 6
+        versionName = "1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -35,7 +35,7 @@ android {
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${properties.getProperty("GOOGLE_WEB_CLIENT_ID") ?: ""}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${properties.getProperty("FIREBASE_API_KEY") ?: ""}\"")
         buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", "\"${properties.getProperty("FIREBASE_MESSAGING_SENDER_ID") ?: ""}\"")
-        buildConfigField("String", "FIREBASE_APP_ID", "\"${properties.getProperty("FIREBASE_APP_ID") ?: ""}\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"${properties.getProperty("FIREBASE_APP_ID") ?: "1:242283846154:android:62bb666f8311e749c49df3"}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${properties.getProperty("TMDB_API_KEY") ?: ""}\"")
         buildConfigField("String", "OMD_API_KEY", "\"${properties.getProperty("OMD_API_KEY") ?: ""}\"")
         buildConfigField("String", "FANART_API_KEY", "\"${properties.getProperty("FANART_API_KEY") ?: ""}\"")
@@ -48,10 +48,21 @@ android {
         buildConfigField("String", "YOUTUBE_API_KEY_2", "\"${properties.getProperty("YOUTUBE_API_KEY_2") ?: ""}\"")
         buildConfigField("String", "YOUTUBE_API_KEY_3", "\"${properties.getProperty("YOUTUBE_API_KEY_3") ?: ""}\"")
         buildConfigField("String", "YOUTUBE_API_KEY_4", "\"${properties.getProperty("YOUTUBE_API_KEY_4") ?: ""}\"")
+        buildConfigField("String", "SERP_API_KEY", "\"${properties.getProperty("SERP_API_KEY") ?: ""}\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = project.rootProject.file(properties.getProperty("signing.storeFile") ?: "release-key.jks")
+            storePassword = properties.getProperty("signing.storePassword") ?: ""
+            keyAlias = properties.getProperty("signing.keyAlias") ?: ""
+            keyPassword = properties.getProperty("signing.keyPassword") ?: ""
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

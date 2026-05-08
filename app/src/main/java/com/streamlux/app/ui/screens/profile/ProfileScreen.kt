@@ -118,7 +118,8 @@ fun ProfileScreen(
             item {
                 ProfileSectionTitle("Legacy & Legal")
                 ProfileMenuRow("Our Mission", Icons.Default.Public, onClick = { onNavigateToLegal("mission") })
-                ProfileMenuRow("Security & Privacy", Icons.Default.Security, onClick = { onNavigateToLegal("security") })
+                ProfileMenuRow("Security Protocols", Icons.Default.Security, onClick = { onNavigateToLegal("security") })
+                ProfileMenuRow("Privacy Policy", Icons.Default.PrivacyTip, onClick = { onNavigateToLegal("privacy") })
                 ProfileMenuRow("Terms of Service", Icons.Default.Description, onClick = { onNavigateToLegal("terms") })
                 ProfileMenuRow("Copyright Center", Icons.Default.Copyright, onClick = { onNavigateToLegal("copyright") })
                 ProfileMenuRow("Website Ownership", Icons.Default.Info, onClick = { onNavigateToLegal("copyright") })
@@ -128,6 +129,10 @@ fun ProfileScreen(
             item {
                 Spacer(modifier = Modifier.height(24.dp))
                 if (user != null) {
+                    ProfileSectionTitle("Danger Zone")
+                    ProfileMenuRow("Account Deletion", Icons.Default.DeleteForever, onClick = { onNavigateToLegal("danger_zone") })
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = { viewModel.signOut() },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).height(56.dp),

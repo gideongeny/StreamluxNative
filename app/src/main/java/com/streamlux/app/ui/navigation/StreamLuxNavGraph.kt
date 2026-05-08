@@ -176,6 +176,12 @@ fun StreamLuxApp(windowSizeClass: WindowSizeClass) {
                     )
                 }
 
+                composable("danger_zone") {
+                    com.streamlux.app.ui.screens.profile.DangerZoneScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
                 composable("detail/{type}/{id}") {
                     MediaDetailScreen(
                         onNavigateBack = { navController.popBackStack() },

@@ -35,12 +35,11 @@ fun CopyrightScreen(onNavigateBack: () -> Unit) {
 
         LegalSection(title = "Website Ownership") {
             Text(
-                "StreamLux is owned and operated by Gideon Cheruiyot (Gideon Geny) - Multi-Award Winning Tech Innovator.\n\n" +
+                "StreamLux is owned and operated by StreamLux Media Group - Premier Digital Entertainment.\n\n" +
                 "Contact Information:\n" +
-                "• Email: gideongeng@gmail.com\n" +
-                "• Facebook: facebook.com/gideo.cheruiyot.2025\n" +
-                "• Instagram: instagram.com/gideo.cheruiyo\n\n" +
-                "Support StreamLux: If you encounter issues, please contact the developer directly.",
+                "• Email: support@streamlux.app\n" +
+                "• X (Twitter): @StreamLuxUpd\n\n" +
+                "Support StreamLux: If you encounter issues, please contact our support team.",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 fontSize = 14.sp
             )

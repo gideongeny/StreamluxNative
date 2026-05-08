@@ -108,7 +108,7 @@ fun HomeScreen(
                     isSelected = selectedTab == "Movies",
                     onClick = { selectedTab = "Movies" }
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 TabButton(
                     title = "TV Shows",
                     icon = "\uD83D\uDCFA",
@@ -126,35 +126,63 @@ fun HomeScreen(
 
             val shortsData by viewModel.shortsData.collectAsState()
 
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                item {
-                    if (trendingSection != null && trendingSection.items.isNotEmpty()) {
-                        HeroBanner(
-                            items = trendingSection.items, 
+            val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+            val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val bannerHeight = if (isLandscape) 360.dp else 450.dp
+
+            if (currentData.isEmpty()) {
+                // Professional Loading Shimmer
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item { 
+                        Box(modifier = Modifier.fillMaxWidth().height(bannerHeight).padding(16.dp).clip(RoundedCornerShape(16.dp)).background(Color.DarkGray.copy(alpha = 0.3f)))
+                    }
+                    items(4) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Box(modifier = Modifier.width(150.dp).height(24.dp).clip(RoundedCornerShape(4.dp)).background(Color.DarkGray.copy(alpha = 0.3f)))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                repeat(4) {
+                                    Box(modifier = Modifier.width(115.dp).height(175.dp).clip(RoundedCornerShape(8.dp)).background(Color.DarkGray.copy(alpha = 0.3f)))
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(0.dp) // Tighten vertical gap
+                ) {
+                    item {
+                        if (trendingSection != null && trendingSection.items.isNotEmpty()) {
+                            HeroBanner(
+                                items = trendingSection.items, 
+                                height = bannerHeight,
+                                onMovieClick = { id -> onNavigateToDetail(id, mediaType) },
+                                onPrefetch = { id -> viewModel.prefetchMedia(id, mediaType) }
+                            )
+                        }
+                    }
+
+                    // WORLD-CLASS: Vertical Shorts Feed (Aggregated via SerpApi)
+                    if (shortsData.isNotEmpty()) {
+                        item {
+                            ShortsSectionRow(shortsData)
+                        }
+                    }
+                    
+                    items(scrollData) { section ->
+                        HomeSectionRow(
+                            section = section,
+                            mediaType = mediaType,
                             onMovieClick = { id -> onNavigateToDetail(id, mediaType) },
                             onPrefetch = { id -> viewModel.prefetchMedia(id, mediaType) }
                         )
                     }
-                }
-
-                // WORLD-CLASS: Vertical Shorts Feed (Aggregated via SerpApi)
-                if (shortsData.isNotEmpty()) {
+                    
                     item {
-                        ShortsSectionRow(shortsData)
+                        Spacer(modifier = Modifier.height(110.dp)) // Correct Clearance for Floating Nav
                     }
-                }
-                
-                items(scrollData) { section ->
-                    HomeSectionRow(
-                        section = section,
-                        mediaType = mediaType,
-                        onMovieClick = { id -> onNavigateToDetail(id, mediaType) },
-                        onPrefetch = { id -> viewModel.prefetchMedia(id, mediaType) }
-                    )
-                }
-                
-                item {
-                    Spacer(modifier = Modifier.height(110.dp)) // Correct Clearance for Floating Nav
                 }
             }
         }
@@ -323,7 +351,7 @@ fun HomeSectionRow(
 
 @androidx.compose.foundation.ExperimentalFoundationApi
 @Composable
-fun HeroBanner(items: List<TmdbItem>, onMovieClick: (Int) -> Unit, onPrefetch: (Int) -> Unit) {
+fun HeroBanner(items: List<TmdbItem>, height: androidx.compose.ui.unit.Dp, onMovieClick: (Int) -> Unit, onPrefetch: (Int) -> Unit) {
     val pagerState = rememberPagerState(pageCount = { minOf(items.size, 5) })
     
     // Automatically prefetch the item that is currently centered in the Hero Banner
@@ -347,8 +375,8 @@ fun HeroBanner(items: List<TmdbItem>, onMovieClick: (Int) -> Unit, onPrefetch: (
         state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
-            .height(450.dp)
-            .padding(bottom = 16.dp)
+            .height(height)
+            .padding(bottom = 8.dp)
     ) { page ->
         val item = items[page]
         Box(

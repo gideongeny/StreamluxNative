@@ -30,7 +30,8 @@ data class Episode(
     @SerializedName("episode_number") val episodeNumber: Int,
     val name: String,
     val overview: String?,
-    @SerializedName("still_path") val stillPath: String?
+    @SerializedName("still_path") val stillPath: String?,
+    @SerializedName("air_date") val airDate: String?
 ) {
     val fullStillUrl: String get() = "https://image.tmdb.org/t/p/w500$stillPath"
 }

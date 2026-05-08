@@ -9,6 +9,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class LiveTVViewModel @Inject constructor(
@@ -36,13 +39,28 @@ class LiveTVViewModel @Inject constructor(
     private val _countries = MutableStateFlow<List<String>>(listOf("All"))
     val countries: StateFlow<List<String>> = _countries
 
+    // ELITE PERFORMANCE: Pre-filtered and combined state for the UI
+    val filteredChannels: StateFlow<List<TVChannel>> = combine(
+        _allChannels, _activeCategory, _activeCountry, _searchQuery
+    ) { all, category, country, query ->
+        all.filter { channel ->
+            val matchesCategory = category == "All" || channel.category == category
+            val matchesCountry = country == "All" || (channel.country ?: "Global") == country
+            val matchesSearch = query.isEmpty() || channel.name.contains(query, ignoreCase = true)
+            matchesCategory && matchesCountry && matchesSearch
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
         viewModelScope.launch {
-            val channels = tvChannelRepository.getLiveChannels()
-            _allChannels.value = channels
-            _categories.value = listOf("All") + channels.map { it.category }.distinct().sorted()
-            updateCountries(channels, "All")
-            _isLoading.value = false
+            try {
+                val channels = tvChannelRepository.getLiveChannels()
+                _allChannels.value = channels
+                _categories.value = listOf("All") + channels.map { it.category }.distinct().sorted()
+                updateCountries(channels, "All")
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
@@ -53,7 +71,7 @@ class LiveTVViewModel @Inject constructor(
 
     fun setCategory(category: String) {
         _activeCategory.value = category
-        _activeCountry.value = "All" // Reset country on category change
+        _activeCountry.value = "All"
         updateCountries(_allChannels.value, category)
     }
 
