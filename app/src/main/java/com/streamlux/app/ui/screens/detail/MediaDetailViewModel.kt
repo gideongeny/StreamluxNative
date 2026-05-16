@@ -72,9 +72,12 @@ class MediaDetailViewModel @Inject constructor(
                 libraryDao.getEpisodesForShow(mediaId).collect { episodes ->
                     _downloadedEpisodes.value = episodes
                     
-                    // Specific tracker for the "Play" button (usually the latest selected or s1e1)
-                    _downloadedItem.value = episodes.find { 
-                        if (mediaType == "movie") true else it.seasonNumber == _selectedSeason.value && it.episodeNumber == 1
+                    // Tracks the first downloaded episode of the currently selected season
+                    // to drive the "WATCH OFFLINE" play button. Previously hardcoded to
+                    // episodeNumber == 1, which caused downloaded S1E12 to show as "not downloaded".
+                    _downloadedItem.value = episodes.find {
+                        if (mediaType == "movie") true
+                        else it.seasonNumber == _selectedSeason.value
                     }
                 }
             } catch (e: Exception) {

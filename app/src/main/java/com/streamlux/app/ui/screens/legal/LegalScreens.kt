@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,39 +22,57 @@ import com.streamlux.app.ui.theme.PrimaryOrange
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CopyrightScreen(onNavigateBack: () -> Unit) {
-    LegalBaseScreen(title = "Copyright & Legal", onNavigateBack = onNavigateBack) {
-        LegalSection(title = "Copyright Notice") {
+    LegalBaseScreen(title = "Copyright & Compliance", onNavigateBack = onNavigateBack) {
+        LegalSection(title = "Legal Framework (Kenya)") {
             Text(
-                "© 2024 StreamLux. All rights reserved.\n\n" +
-                "StreamLux (\"we\", \"us\", or \"our\") is a streaming platform that provides " +
-                "access to movies, TV shows, and sports content. All content displayed " +
-                "on this website is the property of their respective owners.",
+                "StreamLux operates in strict adherence to the Copyright and Related Rights Act (Kenya). " +
+                "We are committed to the protection of intellectual property in accordance with " +
+                "Articles 11(2)(c) and 40(5) of the Constitution of Kenya.\n\n" +
+                "As an Online Intermediary (Section 81), we act as a neutral metadata portal. " +
+                "We do not host or modify the content provided by third-party aggregators.",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 fontSize = 14.sp
             )
         }
 
-        LegalSection(title = "Website Ownership") {
+        LegalSection(title = "Takedown Policy (Section 82)") {
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
             Text(
-                "StreamLux is owned and operated by StreamLux Media Group - Premier Digital Entertainment.\n\n" +
-                "Contact Information:\n" +
-                "• Email: support@streamlux.app\n" +
-                "• X (Twitter): @StreamLuxUpd\n\n" +
-                "Support StreamLux: If you encounter issues, please contact our support team.",
+                "In compliance with Section 82 of the Copyright Bill, we provide a structured " +
+                "mechanism for rights holders to report infringement.\n\n" +
+                "Upon receipt of a valid notice, we will disable access to infringing links " +
+                "within 48 hours.",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 fontSize = 14.sp
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { uriHandler.openUri("https://streamlux-67a84.web.app/copyright#takedown") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.8f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Flag,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("REPORT CONTENT / TAKEDOWN", fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "Alternatively, you may contact dmca@streamlux.app with the required documentation.",
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                fontSize = 12.sp
+            )
         }
 
-        LegalSection(title = "Content Disclaimer") {
+        LegalSection(title = "Repeat Infringer Policy") {
             Text(
-                "StreamLux does not host, store, or distribute any video content. " +
-                "We provide links to external streaming sources and aggregators. " +
-                "All movies, TV shows, and sports content are the property of their " +
-                "respective copyright holders.\n\n" +
-                "We respect intellectual property rights and comply with applicable " +
-                "copyright laws. If you believe that any content on our website " +
-                "infringes your copyright, please contact us immediately.",
+                "Pursuant to Section 81(2)(e), StreamLux maintains a strict Repeat Infringer Policy. " +
+                "Sources found to be consistently providing infringing links will be permanently " +
+                "banned from our indexing service.",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 fontSize = 14.sp
             )

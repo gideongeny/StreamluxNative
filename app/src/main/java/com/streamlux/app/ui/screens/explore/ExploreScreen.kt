@@ -50,6 +50,8 @@ fun ExploreScreen(
     val countries by viewModel.countries.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -71,27 +73,29 @@ fun ExploreScreen(
                 letterSpacing = (-1).sp
             )
             
-            IconButton(onClick = onNavigateToProfile) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    val photoUrl = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.photoUrl
-                    if (photoUrl != null) {
-                        coil.compose.AsyncImage(
-                            model = photoUrl.toString(),
-                            contentDescription = "Profile",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Profile",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.padding(6.dp)
-                        )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onNavigateToProfile) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        val photoUrl = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.photoUrl
+                        if (photoUrl != null) {
+                            coil.compose.AsyncImage(
+                                model = photoUrl.toString(),
+                                contentDescription = "Profile",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Profile",
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(6.dp)
+                            )
+                        }
                     }
                 }
             }

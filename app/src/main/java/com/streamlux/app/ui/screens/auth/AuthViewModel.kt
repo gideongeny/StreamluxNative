@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import android.content.Context
+import com.streamlux.app.MainActivity
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
@@ -63,6 +64,10 @@ class AuthViewModel @Inject constructor(
     }
 
     fun signInWithGoogle(context: Context) {
+        // Prevent App Open Ad from firing when Credential Manager
+        // bottom sheet dismisses and triggers onResume()
+        MainActivity.isAuthInProgress = true
+        
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
@@ -72,7 +77,7 @@ class AuthViewModel @Inject constructor(
                 val googleIdOption = GetGoogleIdOption.Builder()
                     .setFilterByAuthorizedAccounts(false)
                     .setServerClientId(Constants.GOOGLE_WEB_CLIENT_ID)
-                    .setAutoSelectEnabled(true)
+                    .setAutoSelectEnabled(false) // Let users choose their account
                     .build()
 
                 val request = GetCredentialRequest.Builder()
@@ -93,6 +98,7 @@ class AuthViewModel @Inject constructor(
             } catch (e: Exception) {
                 _error.value = e.localizedMessage ?: "Google Sign-In failed"
             } finally {
+                MainActivity.isAuthInProgress = false
                 _isLoading.value = false
             }
         }

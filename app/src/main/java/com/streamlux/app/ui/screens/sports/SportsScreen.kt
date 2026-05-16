@@ -20,6 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
@@ -41,6 +42,7 @@ fun SportsScreen(
     val highlights by viewModel.highlights.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val currentUser = remember { FirebaseAuth.getInstance().currentUser }
+    val uriHandler = LocalUriHandler.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -122,8 +124,8 @@ fun SportsScreen(
                 items(liveMatches) { fixture ->
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         LiveFixtureCard(fixture, onClick = {
-                            // Navigation to Sports TV Hub
-                            onNavigateToPlayer("sports", "hub")
+                            val webUrl = "https://streamlux-67a84.web.app/sports/arena/${fixture.id}?home=${java.net.URLEncoder.encode(fixture.homeTeam, "UTF-8")}&away=${java.net.URLEncoder.encode(fixture.awayTeam, "UTF-8")}&sport=football"
+                            uriHandler.openUri(webUrl)
                         })
                     }
                 }
@@ -168,8 +170,8 @@ fun SportsScreen(
                 }
                 items(upcomingMatches) { fixture ->
                     UpcomingFixtureRow(fixture, onClick = {
-                        val url = viewModel.getStreamUrl(fixture)
-                        onNavigateToPlayer("sports", java.net.URLEncoder.encode(url, "UTF-8"))
+                        val webUrl = "https://streamlux-67a84.web.app/sports/arena/${fixture.id}?home=${java.net.URLEncoder.encode(fixture.homeTeam, "UTF-8")}&away=${java.net.URLEncoder.encode(fixture.awayTeam, "UTF-8")}&sport=football"
+                        uriHandler.openUri(webUrl)
                     })
                 }
             }

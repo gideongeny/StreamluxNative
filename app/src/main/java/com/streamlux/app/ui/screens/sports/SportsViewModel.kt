@@ -86,8 +86,9 @@ class SportsViewModel @Inject constructor(
 
     private fun processMatches(rawLive: List<SportsFixture>, incomingUpcoming: List<SportsFixture>) {
         val now = System.currentTimeMillis()
-        val matchDurationMillis = 3 * 60 * 60 * 1000L
+        val matchDurationMillis = 4 * 60 * 60 * 1000L // Increased to 4 hours to be safe
         
+        // Merge lists, prioritizing the "Live" API response which is more accurate for real-time status
         val allMatches = (rawLive + incomingUpcoming).distinctBy { it.id }
         
         val currentLive = mutableListOf<SportsFixture>()
@@ -99,18 +100,26 @@ class SportsViewModel @Inject constructor(
                 if (fixture.kickoffTime.contains("T")) {
                     java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
                 } else if (fixture.kickoffTime.contains("-")) {
-                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                    sdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
+                    // Try parsing full datetime first yyyy-MM-dd HH:mm
+                    val fullSdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+                    fullSdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    fullSdf.parse(fixture.kickoffTime)?.time ?: run {
+                        // Fallback to date only
+                        val dateSdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                        dateSdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
+                    }
                 } else 0L
             } catch (e: Exception) { 0L }
 
             val isExpired = kickoff > 0 && (now - kickoff) >= matchDurationMillis
-            val isLiveNow = (fixture.status == "live" || fixture.isLive) && !isExpired
-            val hasStarted = kickoff > 0 && now >= kickoff && !isExpired
+            val apiSaysLive = fixture.status == "live" || fixture.isLive || (fixture.minute != null && fixture.minute != "")
+            val timeSaysLive = kickoff > 0 && now >= (kickoff - 5 * 60 * 1000) && !isExpired // Started or starting in 5 mins
+            
+            val isLiveNow = apiSaysLive || timeSaysLive
 
             if (isExpired) {
-                // Gone forever after 3 hours
-            } else if (isLiveNow || hasStarted) {
+                // Gone after duration
+            } else if (isLiveNow) {
                 currentLive.add(fixture.copy(status = "live", isLive = true))
             } else if (fixture.status == "finished") {
                 currentFinished.add(fixture)
@@ -120,9 +129,9 @@ class SportsViewModel @Inject constructor(
             }
         }
 
-        _liveMatches.value = currentLive
-        _upcomingMatches.value = currentUpcoming
-        _finishedMatches.value = currentFinished
+        _liveMatches.value = currentLive.sortedBy { it.kickoffTime }
+        _upcomingMatches.value = currentUpcoming.sortedBy { it.kickoffTime }
+        _finishedMatches.value = currentFinished.sortedByDescending { it.kickoffTime }
     }
 
     private fun formatCountdown(diff: Long): String {

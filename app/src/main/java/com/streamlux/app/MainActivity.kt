@@ -32,7 +32,8 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     companion object {
-        var isPlayingVideo = false
+        /** Set to true before starting any auth flow to prevent App Open Ads from interrupting it */
+        var isAuthInProgress = false
     }
     
     private val viewModel: MainViewModel by viewModels()
@@ -42,11 +43,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialize AdMob SDK
-        MobileAds.initialize(this) { initStatus ->
-            // Pre-load ads after SDK is ready
+        // Initialize AdMob SDK — pre-load all ad types so they are ready instantly
+        MobileAds.initialize(this) {
             AdManager.loadInterstitial(this)
             AdManager.loadAppOpenAd(this)
+            AdManager.loadRewardedAd(this)
         }
 
         setContent {
@@ -97,13 +98,17 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Refresh settings in case they were changed in other activities/screens
         viewModel.refreshSettings()
-        // Show App Open Ad when user returns to app
-        AdManager.showAppOpenAd(this)
+        // Show App Open Ad when user returns to app — but NOT during auth flows
+        // (Credential Manager / Google Sign-In causes onResume to fire, which would
+        //  show an ad instead of letting the sign-in complete.)
+        if (!isAuthInProgress) {
+            AdManager.showAppOpenAd(this)
+        }
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (isPlayingVideo && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (AdManager.isVideoPlaying && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val params = android.app.PictureInPictureParams.Builder().build()
             enterPictureInPictureMode(params)
         }

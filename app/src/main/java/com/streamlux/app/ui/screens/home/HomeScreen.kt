@@ -27,6 +27,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clipToBounds
 import coil.compose.AsyncImage
 import com.streamlux.app.data.model.HomeSection
 import com.streamlux.app.data.model.TmdbItem
@@ -376,12 +377,14 @@ fun HeroBanner(items: List<TmdbItem>, height: androidx.compose.ui.unit.Dp, onMov
         modifier = Modifier
             .fillMaxWidth()
             .height(height)
-            .padding(bottom = 8.dp)
+            .background(Color.Black)
+            .clipToBounds()
     ) { page ->
         val item = items[page]
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.Black)
                 .clickable { onMovieClick(item.id) }
         ) {
             // Ken Burns Effect
@@ -407,7 +410,7 @@ fun HeroBanner(items: List<TmdbItem>, height: androidx.compose.ui.unit.Dp, onMov
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f), BackgroundDark),
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f), Color.Black),
                             startY = 200f
                         )
                     )

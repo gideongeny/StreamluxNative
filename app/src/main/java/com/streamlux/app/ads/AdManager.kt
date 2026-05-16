@@ -7,22 +7,28 @@ import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.OnUserEarnedRewardListener
 import com.google.android.gms.ads.appopen.AppOpenAd
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
-import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd
-import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 
 private const val TAG = "StreamLuxAds"
 
 object AdManager {
-    private const val INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-1281448884303417/6946857385"
-    private const val APP_OPEN_AD_UNIT_ID = "ca-app-pub-1281448884303417/3965470822"
-    private const val REWARDED_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-1281448884303417/1872613770"
+    // ── Your live ad unit IDs ──────────────────────────────────────────────
+    private const val INTERSTITIAL_AD_UNIT_ID        = "ca-app-pub-1281448884303417/3383670834"
+    private const val APP_OPEN_AD_UNIT_ID             = "ca-app-pub-1281448884303417/3800649401"
+    private const val REWARDED_AD_UNIT_ID_1           = "ca-app-pub-1281448884303417/6220147770"
+    private const val REWARDED_AD_UNIT_ID_2           = "ca-app-pub-1281448884303417/5113731075"
 
     private var interstitialAd: InterstitialAd? = null
     private var appOpenAd: AppOpenAd? = null
     private var isAppOpenAdShowing = false
+    private var rewardedAd: RewardedAd? = null
+
+    // ── Interstitial ──────────────────────────────────────────────────────
 
     /** Call once on app start to pre-load an Interstitial Ad */
     fun loadInterstitial(context: Context) {
@@ -51,7 +57,11 @@ object AdManager {
         )
     }
 
-    /** Show the interstitial if ready (e.g., before playing a video) */
+    /**
+     * Show the interstitial if ready, then invoke [onClose].
+     * If no ad is cached, [onClose] is invoked immediately so the user
+     * is never blocked.
+     */
     fun showInterstitial(activity: Activity, onClose: () -> Unit = {}) {
         if (interstitialAd != null) {
             interstitialAd!!.fullScreenContentCallback = object : FullScreenContentCallback() {
@@ -71,6 +81,8 @@ object AdManager {
         }
     }
 
+    // ── App Open ──────────────────────────────────────────────────────────
+
     /** Load App Open Ad */
     fun loadAppOpenAd(context: Context) {
         AppOpenAd.load(
@@ -89,9 +101,11 @@ object AdManager {
         )
     }
 
-    /** Show App Open Ad (call on app foregrounding) */
+    /** Show App Open Ad (called on app foregrounding from MainActivity.onResume) */
+    var isVideoPlaying: Boolean = false
+
     fun showAppOpenAd(activity: Activity) {
-        if (isAppOpenAdShowing || appOpenAd == null) return
+        if (isAppOpenAdShowing || appOpenAd == null || isVideoPlaying) return
         appOpenAd!!.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 isAppOpenAdShowing = false
@@ -109,21 +123,59 @@ object AdManager {
         appOpenAd!!.show(activity)
     }
 
-    /** Pre-load Rewarded Interstitial */
-    fun loadRewardedInterstitial(context: Context, onLoaded: (RewardedInterstitialAd) -> Unit) {
-        RewardedInterstitialAd.load(
+    // ── Rewarded ──────────────────────────────────────────────────────────
+
+    /**
+     * Pre-load a Rewarded Ad.
+     * Uses REWARDED_AD_UNIT_ID_1 by default, falling back to REWARDED_AD_UNIT_ID_2.
+     * Call this early (e.g., after SDK init or after the previous ad was shown)
+     * so the ad is ready when the user taps "Download".
+     */
+    fun loadRewardedAd(context: Context, useSecondary: Boolean = false) {
+        val unitId = if (useSecondary) REWARDED_AD_UNIT_ID_2 else REWARDED_AD_UNIT_ID_1
+        RewardedAd.load(
             context,
-            REWARDED_INTERSTITIAL_AD_UNIT_ID,
+            unitId,
             AdRequest.Builder().build(),
-            object : RewardedInterstitialAdLoadCallback() {
-                override fun onAdLoaded(ad: RewardedInterstitialAd) {
-                    Log.d(TAG, "Rewarded Interstitial loaded.")
-                    onLoaded(ad)
+            object : RewardedAdLoadCallback() {
+                override fun onAdLoaded(ad: RewardedAd) {
+                    rewardedAd = ad
+                    Log.d(TAG, "Rewarded Ad loaded ($unitId).")
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    Log.e(TAG, "Rewarded Interstitial failed: ${error.message}")
+                    Log.e(TAG, "Rewarded Ad failed to load: ${error.message}")
+                    // Try the secondary unit if the primary failed
+                    if (!useSecondary) loadRewardedAd(context, useSecondary = true)
                 }
             }
         )
+    }
+
+    /**
+     * Show the rewarded ad, then invoke [onRewarded] when the user earns the reward.
+     * If no ad is cached, [onRewarded] is invoked immediately so the download
+     * still proceeds without blocking the user.
+     */
+    fun showRewardedAd(activity: Activity, onRewarded: () -> Unit) {
+        val ad = rewardedAd
+        if (ad != null) {
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent() {
+                    rewardedAd = null
+                    loadRewardedAd(activity) // Pre-load next ad
+                }
+                override fun onAdFailedToShowFullScreenContent(e: AdError) {
+                    rewardedAd = null
+                    onRewarded() // Graceful fallback — don't block the user
+                }
+            }
+            ad.show(activity, OnUserEarnedRewardListener { rewardItem ->
+                Log.d(TAG, "User earned reward: ${rewardItem.amount} ${rewardItem.type}")
+                onRewarded()
+            })
+        } else {
+            // No ad cached — let the download proceed immediately
+            onRewarded()
+        }
     }
 }

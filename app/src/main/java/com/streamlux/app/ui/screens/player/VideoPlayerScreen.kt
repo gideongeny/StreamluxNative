@@ -2,6 +2,8 @@ package com.streamlux.app.ui.screens.player
 
 import android.annotation.SuppressLint
 import android.app.DownloadManager
+import com.streamlux.app.ads.AdManager
+import com.streamlux.app.MainActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import kotlinx.coroutines.delay
@@ -63,7 +65,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.mediarouter.app.MediaRouteButton
 import com.google.android.gms.cast.framework.CastButtonFactory
-import com.streamlux.app.MainActivity
 import com.streamlux.app.ui.theme.PrimaryOrange
 import com.streamlux.app.utils.BlobDownloadInterface
 import com.streamlux.app.utils.BrowserConstants
@@ -183,13 +184,15 @@ fun VideoPlayerScreen(
     // ─── ONLINE: WebView ─────────────────────────────────────────────────
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    // Load URL via LaunchedEffect so we control headers exactly once per URL change
-    androidx.compose.runtime.LaunchedEffect(currentServer?.url) {
-        currentServer?.url?.let { url ->
-            if (url.isNotBlank() && (viewModel.mediaType == "movie" || viewModel.mediaType == "tv")) {
-                isLoaded = false
+    androidx.compose.runtime.LaunchedEffect(currentServer?.url, webViewRef) {
+        val url = currentServer?.url
+        if (url != null && url.isNotBlank()) {
+            isLoaded = false
+            if (url.endsWith(".m3u8") || viewModel.mediaType == "live" || viewModel.mediaType == "sports") {
+                // Do nothing here, it will be handled by NativeHlsPlayer below
+            } else if (webViewRef != null) {
                 val headers = HashMap<String, String>()
-                // Spoof the origin so Videasy sees a legitimate web browser referer
+                // Spoof the origin so servers see a legitimate web browser referer
                 headers["Referer"] = "https://streamlux-67a84.web.app/"
                 headers["Origin"] = "https://streamlux-67a84.web.app"
                 // STEALTH FINGERPRINT WIPE: Suppress Android WebView fingerprint header
@@ -202,7 +205,7 @@ fun VideoPlayerScreen(
 
     // ─── SYSTEM UI & NAVIGATION ──────────────────────────────────────────
     DisposableEffect(context) {
-        MainActivity.isPlayingVideo = true
+        AdManager.isVideoPlaying = true
         val activity = context.findActivity() as? ComponentActivity
         val pipReceiver = androidx.core.util.Consumer<androidx.core.app.PictureInPictureModeChangedInfo> { info ->
             isPiPMode = info.isInPictureInPictureMode
@@ -210,7 +213,8 @@ fun VideoPlayerScreen(
         activity?.addOnPictureInPictureModeChangedListener(pipReceiver)
         onDispose {
             activity?.removeOnPictureInPictureModeChangedListener(pipReceiver)
-            MainActivity.isPlayingVideo = false
+            MainActivity.isAuthInProgress = false
+            AdManager.isVideoPlaying = false
         }
     }
 
@@ -299,27 +303,27 @@ fun VideoPlayerScreen(
                 }
                 isLoaded = true
             }
-        } else if (isLiveBypass) {
-            // ── LIVE TV / SPORTS: Native ExoPlayer (M3U8) ──
-            if (targetUrl.isNotBlank()) {
-                NativeHlsPlayer(
-                    url = targetUrl,
-                    simpleCache = viewModel.simpleCache,
-                    modifier = Modifier.fillMaxSize()
-                )
-                isLoaded = true
-            }
         } else {
-            // ── ONLINE: WebView portal ──
-
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    val activityCtx = ctx.findActivity() ?: ctx
+            // ── ONLINE: WebView portal (All streaming media) ──
+            if (currentServer?.url?.endsWith(".m3u8") == true || viewModel.mediaType == "live" || viewModel.mediaType == "sports") {
+                currentServer?.url?.let { url ->
+                    isLoaded = true
+                    // Pass null for cache to completely disable caching for Live TV streams,
+                    // fixing the 30-second timeout/freeze bug.
+                    NativeHlsPlayer(
+                        url = url,
+                        simpleCache = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            } else {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        val activityCtx = ctx.findActivity() ?: ctx
                     WebView(activityCtx).apply {
                         setBackgroundColor(android.graphics.Color.BLACK)
-                        // Hardware-accelerated decoding for smooth video
-                        setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                        // Removed setLayerType hardware enforcement to allow native WebView HTML5 video acceleration to handle surfaces properly
                         settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
@@ -426,6 +430,7 @@ fun VideoPlayerScreen(
 
             )
         }
+    }
 
         // Loading spinner (hidden once content fires onPageFinished or ExoPlayer is ready)
         if (!isLoaded && !isPiPMode && !isLiveBypass) {

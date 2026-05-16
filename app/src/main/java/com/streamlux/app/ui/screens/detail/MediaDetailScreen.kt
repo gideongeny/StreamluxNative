@@ -63,6 +63,7 @@ import com.streamlux.app.data.model.TmdbItem
 import com.streamlux.app.data.model.Episode
 import androidx.palette.graphics.Palette
 import coil.request.ImageRequest
+import com.streamlux.app.ads.AdManager
 
 @Composable
 fun DetailActions(
@@ -79,12 +80,13 @@ fun DetailActions(
     
     Column {
         Button(
-            onClick = { 
+            onClick = {
                 val encodedTitle = Uri.encode(item.displayTitle)
                 val encodedPoster = Uri.encode(item.posterPath ?: "null")
-                onNavigateToPlayer(
-                    "player/${viewModel.mediaType}/${viewModel.mediaId}?season=$selectedSeason&episode=1&title=$encodedTitle&poster=$encodedPoster"
-                )
+                val route = "player/${viewModel.mediaType}/${viewModel.mediaId}?season=$selectedSeason&episode=1&title=$encodedTitle&poster=$encodedPoster"
+                val activity = context.findActivity()
+                if (activity != null) AdManager.showInterstitial(activity) { onNavigateToPlayer(route) }
+                else onNavigateToPlayer(route)
             },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(
@@ -152,13 +154,15 @@ fun DetailActions(
             // Download
             val downloadStatus = downloadedItem?.downloadStatus
             Surface(
-                onClick = { 
+                onClick = {
                     if (downloadStatus != "completed") {
                         val url = if (viewModel.mediaType == "tv")
                             "https://dl.vidsrc.vip/tv/${viewModel.mediaId}"
                         else
                             "https://dl.vidsrc.vip/movie/${viewModel.mediaId}"
-                        onShowPortal(url)
+                        val activity = context.findActivity()
+                        if (activity != null) AdManager.showRewardedAd(activity) { onShowPortal(url) }
+                        else onShowPortal(url)
                     } else {
                         Toast.makeText(context, "Already downloaded", Toast.LENGTH_SHORT).show()
                     }
@@ -280,6 +284,7 @@ fun SeasonAndEpisodes(
     onNavigateToPlayer: (String) -> Unit,
     onShowPortal: (String) -> Unit
 ) {
+    val context = LocalContext.current
     if (!item.seasons.isNullOrEmpty()) {
         Spacer(modifier = Modifier.height(32.dp))
         Text(
@@ -323,9 +328,10 @@ fun SeasonAndEpisodes(
                     modifier = Modifier.fillMaxWidth().clickable(enabled = !isUnreleased) {
                         val encodedTitle = Uri.encode(item.displayTitle)
                         val encodedPoster = Uri.encode(item.posterPath ?: "null")
-                        onNavigateToPlayer(
-                            "player/${viewModel.mediaType}/${viewModel.mediaId}?season=$selectedSeason&episode=${ep.episodeNumber}&title=$encodedTitle&poster=$encodedPoster"
-                        )
+                        val route = "player/${viewModel.mediaType}/${viewModel.mediaId}?season=$selectedSeason&episode=${ep.episodeNumber}&title=$encodedTitle&poster=$encodedPoster"
+                        val activity = context.findActivity()
+                        if (activity != null) AdManager.showInterstitial(activity) { onNavigateToPlayer(route) }
+                        else onNavigateToPlayer(route)
                     },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -382,7 +388,10 @@ fun SeasonAndEpisodes(
                         IconButton(
                             onClick = {
                                 if (episodeStatus?.downloadStatus != "completed") {
-                                    onShowPortal("https://dl.vidsrc.vip/tv/${viewModel.mediaId}/$selectedSeason/${ep.episodeNumber}")
+                                    val url = "https://dl.vidsrc.vip/tv/${viewModel.mediaId}/$selectedSeason/${ep.episodeNumber}"
+                                    val activity = context.findActivity()
+                                    if (activity != null) AdManager.showRewardedAd(activity) { onShowPortal(url) }
+                                    else onShowPortal(url)
                                 }
                             }
                         ) {
@@ -748,9 +757,12 @@ fun DownloadPortal(initialUrl: String, viewModel: MediaDetailViewModel, onClose:
                             request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
                             val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                             val downloadId = dm.enqueue(request)
-                            val urlPath = Uri.parse(url).pathSegments
-                            val s = urlPath.getOrNull(urlPath.size - 2)?.toIntOrNull() ?: 1
-                            val e = urlPath.lastOrNull()?.toIntOrNull() ?: 1
+                            // BUG FIX: Parse season & episode from the PORTAL URL (dlUrl),
+                            // NOT from the CDN download URL — which is a raw file path with no episode info.
+                            // dlUrl format: https://dl.vidsrc.vip/tv/{mediaId}/{season}/{episode}
+                            val portalPath = Uri.parse(dlUrl).pathSegments
+                            val s = portalPath.getOrNull(portalPath.size - 2)?.toIntOrNull()
+                            val e = portalPath.lastOrNull()?.toIntOrNull()
                             viewModel.onDownloadStarted(systemDownloadId = downloadId, quality = if (fileName.contains("1080")) "1080p" else "720p", season = s, episode = e)
                             Toast.makeText(ctx, "Download started", Toast.LENGTH_LONG).show()
                         } catch (e: Exception) { Log.e("StreamLuxPortal", "Download failed", e) }
