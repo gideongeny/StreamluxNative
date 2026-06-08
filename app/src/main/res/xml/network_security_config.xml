@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Disable cleartext for the main app domains -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Allow cleartext for common media streaming domains that might use HTTP -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">vidsrc.me</domain>
+        <domain includeSubdomains="true">vidsrc.to</domain>
+        <domain includeSubdomains="true">vidsrc.xyz</domain>
+        <domain includeSubdomains="true">vidsrc.pro</domain>
+        <domain includeSubdomains="true">2embed.cc</domain>
+        <domain includeSubdomains="true">2embed.to</domain>
+        <domain includeSubdomains="true">vidlink.pro</domain>
+        <domain includeSubdomains="true">multiembed.mov</domain>
+        <domain includeSubdomains="true">autoembed.cc</domain>
+        <domain includeSubdomains="true">smashystream.com</domain>
+        <domain includeSubdomains="true">smashystream.xyz</domain>
+    </domain-config>
+</network-security-config>

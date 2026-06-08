@@ -1,0 +1,135 @@
+package com.streamlux.app
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.setContent
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import com.google.android.gms.ads.MobileAds
+import com.streamlux.app.ads.AdManager
+import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.Color
+import android.content.Context
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import com.streamlux.app.ui.main.MainViewModel
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    companion object {
+        /** Set to true before starting any auth flow to prevent App Open Ads from interrupting it */
+        var isAuthInProgress = false
+    }
+    
+    private val viewModel: MainViewModel by viewModels()
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        // Initialize AdMob SDK — pre-load all ad types so they are ready instantly
+        MobileAds.initialize(this) {
+            AdManager.loadInterstitial(this)
+            AdManager.loadAppOpenAd(this)
+            AdManager.loadRewardedAd(this)
+        }
+
+        setContent {
+            val isNightMode by viewModel.isNightMode.collectAsState()
+            val windowSizeClass = calculateWindowSizeClass(this)
+            
+            // Play Store Compliance: UGC Disclaimer
+            val prefs = getSharedPreferences("streamlux_prefs", Context.MODE_PRIVATE)
+            var showDisclaimer by remember { mutableStateOf(prefs.getBoolean("show_ugc_disclaimer", true)) }
+            
+            com.streamlux.app.ui.theme.StreamLuxTheme(darkTheme = isNightMode) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    val startDestination = if (viewModel.hasSeenOnboarding) {
+                        com.streamlux.app.ui.navigation.Screen.Home.route
+                    } else {
+                        com.streamlux.app.ui.navigation.Screen.Onboarding.route
+                    }
+
+                    com.streamlux.app.ui.navigation.StreamLuxApp(
+                        windowSizeClass = windowSizeClass,
+                        startDestination = startDestination,
+                        onMarkOnboardingSeen = { viewModel.markOnboardingSeen() }
+                    )
+                    
+                    if (showDisclaimer) {
+                        AlertDialog(
+                            onDismissRequest = { /* Require explicit acceptance */ },
+                            title = { Text("Disclaimer", fontWeight = FontWeight.Bold) },
+                            text = { 
+                                Text("StreamLux is a media indexing tool and aggregator. We do not host any of the media files displayed in this app. All content is sourced from freely available third-party websites and user-generated uploads. By proceeding, you agree to our Terms of Service.") 
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        prefs.edit().putBoolean("show_ugc_disclaimer", false).apply()
+                                        showDisclaimer = false
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = com.streamlux.app.ui.theme.PrimaryOrange)
+                                ) {
+                                    Text("I Agree", color = Color.White)
+                                }
+                            },
+                            dismissButton = {
+                                OutlinedButton(
+                                    onClick = {
+                                        finishAffinity()
+                                    }
+                                ) {
+                                    Text("Exit", color = Color.White)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh settings in case they were changed in other activities/screens
+        viewModel.refreshSettings()
+        // Show App Open Ad when user returns to app — but NOT during auth flows
+        // (Credential Manager / Google Sign-In causes onResume to fire, which would
+        //  show an ad instead of letting the sign-in complete.)
+        if (!isAuthInProgress) {
+            AdManager.showAppOpenAd(this)
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (AdManager.isVideoPlaying && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val params = android.app.PictureInPictureParams.Builder().build()
+            enterPictureInPictureMode(params)
+        }
+    }
+}

@@ -1,0 +1,174 @@
+package com.streamlux.app.ui.screens.sports
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.streamlux.app.data.api.SportsService
+import com.streamlux.app.data.model.SportsFixture
+import com.streamlux.app.data.model.SportsHighlight
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import javax.inject.Inject
+
+@HiltViewModel
+class SportsViewModel @Inject constructor(
+    private val sportsService: SportsService,
+    private val tvChannelRepository: com.streamlux.app.data.repository.TvChannelRepository,
+    private val cacheManager: com.streamlux.app.data.local.SportsCacheManager
+) : ViewModel() {
+
+    private val _liveMatches = MutableStateFlow<List<SportsFixture>>(emptyList())
+    val liveMatches: StateFlow<List<SportsFixture>> = _liveMatches
+
+    private val _upcomingMatches = MutableStateFlow<List<SportsFixture>>(emptyList())
+    val upcomingMatches: StateFlow<List<SportsFixture>> = _upcomingMatches
+
+    private val _finishedMatches = MutableStateFlow<List<SportsFixture>>(emptyList())
+    val finishedMatches: StateFlow<List<SportsFixture>> = _finishedMatches
+
+    private val _highlights = MutableStateFlow<List<SportsHighlight>>(emptyList())
+    val highlights: StateFlow<List<SportsHighlight>> = _highlights
+
+    private val _sportChannels = MutableStateFlow<List<com.streamlux.app.data.model.TVChannel>>(emptyList())
+    val sportChannels: StateFlow<List<com.streamlux.app.data.model.TVChannel>> = _sportChannels
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+
+    private var pollJob: kotlinx.coroutines.Job? = null
+
+    private val _ticker = MutableStateFlow(System.currentTimeMillis())
+
+    init {
+        // Optimistically load cache first so offline users instantly see data
+        _liveMatches.value = cacheManager.getLiveMatches()
+        _upcomingMatches.value = cacheManager.getUpcomingMatches()
+        _highlights.value = cacheManager.getHighlights()
+        
+        startPolling()
+        viewModelScope.launch {
+            try {
+                _sportChannels.value = tvChannelRepository.getSportChannels()
+            } catch (_: Exception) {
+            }
+        }
+        viewModelScope.launch {
+            while(true) {
+                _ticker.value = System.currentTimeMillis()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
+
+    private fun startPolling() {
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            while (true) {
+                _isLoading.value = true
+                
+                try {
+                    val rawLive = sportsService.getLiveMatches()
+                    val incomingUpcoming = sportsService.getUpcomingMatches()
+                    val newHighlights = sportsService.getHighlights()
+
+                    // Update Cache
+                    cacheManager.saveLiveMatches(rawLive)
+                    cacheManager.saveUpcomingMatches(incomingUpcoming)
+                    cacheManager.saveHighlights(newHighlights)
+
+                    processMatches(rawLive, incomingUpcoming)
+                    _highlights.value = newHighlights
+                } catch (e: Exception) {
+                    // Network failed (e.g. Offline). Use cached data, but re-process to update countdowns/statuses
+                    android.util.Log.e("SportsVM", "Network fetch failed, using cache", e)
+                    val cachedLive = cacheManager.getLiveMatches()
+                    val cachedUpcoming = cacheManager.getUpcomingMatches()
+                    processMatches(cachedLive, cachedUpcoming)
+                }
+                
+                _isLoading.value = false
+                kotlinx.coroutines.delay(45000)
+            }
+        }
+    }
+
+    private fun processMatches(rawLive: List<SportsFixture>, incomingUpcoming: List<SportsFixture>) {
+        val now = System.currentTimeMillis()
+        val matchDurationMillis = 4 * 60 * 60 * 1000L // Increased to 4 hours to be safe
+        
+        // Merge lists, prioritizing the "Live" API response which is more accurate for real-time status
+        val allMatches = (rawLive + incomingUpcoming).distinctBy { it.id }
+        
+        val currentLive = mutableListOf<SportsFixture>()
+        val currentUpcoming = mutableListOf<SportsFixture>()
+        val currentFinished = mutableListOf<SportsFixture>()
+
+        allMatches.forEach { fixture ->
+            val kickoff = try {
+                if (fixture.kickoffTime.contains("T")) {
+                    java.time.Instant.parse(fixture.kickoffTime).toEpochMilli()
+                } else if (fixture.kickoffTime.contains("-")) {
+                    // Try parsing full datetime first yyyy-MM-dd HH:mm
+                    val fullSdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+                    fullSdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    fullSdf.parse(fixture.kickoffTime)?.time ?: run {
+                        // Fallback to date only
+                        val dateSdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                        dateSdf.parse(fixture.kickoffTime.split(" ")[0])?.time ?: 0L
+                    }
+                } else 0L
+            } catch (e: Exception) { 0L }
+
+            val isExpired = kickoff > 0 && (now - kickoff) >= matchDurationMillis
+            val apiSaysLive = fixture.status == "live" || fixture.isLive || (fixture.minute != null && fixture.minute != "")
+            val timeSaysLive = kickoff > 0 && now >= (kickoff - 5 * 60 * 1000) && !isExpired // Started or starting in 5 mins
+            
+            val isLiveNow = apiSaysLive || timeSaysLive
+
+            if (isExpired) {
+                // Gone after duration
+            } else if (isLiveNow) {
+                currentLive.add(fixture.copy(status = "live", isLive = true))
+            } else if (fixture.status == "finished") {
+                currentFinished.add(fixture)
+            } else {
+                val countdownStr = if (kickoff > now) formatCountdown(kickoff - now) else null
+                currentUpcoming.add(fixture.copy(countdown = countdownStr))
+            }
+        }
+
+        _liveMatches.value = currentLive.sortedBy { it.kickoffTime }
+        _upcomingMatches.value = currentUpcoming.sortedBy { it.kickoffTime }
+        _finishedMatches.value = currentFinished.sortedByDescending { it.kickoffTime }
+    }
+
+    private fun formatCountdown(diff: Long): String {
+        val seconds = (diff / 1000) % 60
+        val minutes = (diff / (1000 * 60)) % 60
+        val hours = (diff / (1000 * 60 * 60))
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    }
+
+    fun loadSportsData() {
+        startPolling()
+    }
+
+    fun getStreamUrl(fixture: SportsFixture): String {
+        // Parity with React's matchSlug logic: home-vs-away
+        val slug = "${fixture.homeTeam}-vs-${fixture.awayTeam}"
+            .lowercase()
+            .replace(" ", "-")
+            .replace(Regex("[^a-z0-9-]"), "")
+        
+        return "https://sportslive.run/matches/$slug"
+    }
+
+    fun getHighlightUrl(highlight: SportsHighlight): String? {
+        // Extract URL from embed code if possible
+        val embed = highlight.embedUrl ?: return null
+        val match = Regex("src=\"([^\"]+)\"").find(embed)
+        return match?.groupValues?.get(1) ?: embed
+    }
+}

@@ -1,0 +1,289 @@
+package com.streamlux.app.ui.navigation
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.streamlux.app.ui.components.BannerAd
+import com.streamlux.app.ui.screens.detail.MediaDetailScreen
+import com.streamlux.app.ui.screens.explore.ExploreScreen
+import com.streamlux.app.ui.screens.home.HomeScreen
+import com.streamlux.app.ui.screens.profile.ProfileScreen
+import com.streamlux.app.ui.screens.sports.SportsScreen
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import com.streamlux.app.ui.navigation.StreamLuxNavigation
+
+enum class Screen(val route: String) {
+    Home("home"),
+    Sports("sports"),
+    LiveTv("live_tv"),
+    Music("music"),
+    Auth("auth"),
+    Search("search"),
+    Copyright("copyright"),
+    Disclaimer("disclaimer"),
+    Profile("profile"),
+    Onboarding("onboarding"),
+    ProfileSetup("profile_setup"),
+    Library("library?tab={tab}")
+}
+
+
+
+@Composable
+fun StreamLuxApp(
+    windowSizeClass: WindowSizeClass,
+    startDestination: String = Screen.Home.route,
+    onMarkOnboardingSeen: () -> Unit = {}
+) {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    // Use side rail for tablets/laptops (Medium or Expanded)
+    val isExpanded = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
+    val isPlayerScreen = currentRoute?.startsWith("player") == true
+    val noNavBarRoutes = setOf(
+        Screen.Onboarding.route,
+        Screen.Auth.route,
+        Screen.ProfileSetup.route
+    )
+    val showBottomBar = !isPlayerScreen && !isExpanded && currentRoute !in noNavBarRoutes
+
+    Scaffold(
+        bottomBar = {
+            if (showBottomBar) {
+                Column {
+                    BannerAd()
+                    MobileBottomNav(navController = navController)
+                }
+            }
+        }
+    ) { innerPadding ->
+        StreamLuxNavigation(
+            navController = navController,
+            isExpanded = isExpanded && !isPlayerScreen && currentRoute !in noNavBarRoutes,
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            NavHost(
+                navController = navController,
+                startDestination = startDestination,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                composable(Screen.Onboarding.route) {
+                    com.streamlux.app.ui.screens.auth.OnboardingScreen(
+                        onGetStarted = {
+                            onMarkOnboardingSeen()
+                            navController.navigate(Screen.Auth.route) {
+                                popUpTo(Screen.Onboarding.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable(Screen.Home.route) {
+                    HomeScreen(
+                        onNavigateToDetail = { id, type -> navController.navigate("detail/$type/$id") },
+                        onNavigateToCollection = { id -> navController.navigate("collection/$id") },
+                        onNavigateToSearch = { navController.navigate(Screen.Search.route) },
+                        onNavigateToProfile = { navController.navigate(Screen.Profile.route) }
+                    )
+                }
+
+                composable(Screen.Sports.route) {
+                    SportsScreen(
+                        onNavigateToPlayer = { type, id -> navController.navigate("player/$type/$id") },
+                        onNavigateToChannel = { channel ->
+                            val title = android.net.Uri.encode(channel.name)
+                            when {
+                                channel.type == "youtube" && !channel.youtubeId.isNullOrBlank() ->
+                                    navController.navigate("player/youtube/${channel.youtubeId}?season=1&episode=1&title=$title")
+                                else ->
+                                    navController.navigate(
+                                        "player/live/${java.net.URLEncoder.encode(channel.url, "UTF-8")}?season=1&episode=1&title=$title"
+                                    )
+                            }
+                        },
+                        onNavigateToProfile = { navController.navigate(Screen.Profile.route) }
+                    )
+                }
+
+                composable(Screen.LiveTv.route) { 
+                    ExploreScreen(
+                        onNavigateToChannel = { channel ->
+                            val title = android.net.Uri.encode(channel.name)
+                            when {
+                                channel.type == "youtube" && !channel.youtubeId.isNullOrBlank() ->
+                                    navController.navigate("player/youtube/${channel.youtubeId}?season=1&episode=1&title=$title")
+                                else ->
+                                    navController.navigate(
+                                        "player/live/${java.net.URLEncoder.encode(channel.url, "UTF-8")}?season=1&episode=1&title=$title"
+                                    )
+                            }
+                        },
+                        onNavigateToProfile = { navController.navigate(Screen.Profile.route) }
+                    ) 
+                }
+                composable(Screen.Music.route) { 
+                    com.streamlux.app.ui.screens.music.MusicScreen(
+                        onNavigateToProfile = { navController.navigate(Screen.Profile.route) }
+                    ) 
+                }
+
+                composable("profile") {
+                    ProfileScreen(
+                        onNavigateToLegal = { route -> navController.navigate(route) },
+                        onNavigateToLibrary = { tab -> navController.navigate("library?tab=$tab") }
+                    )
+                }
+
+                composable(
+                    route = "library?tab={tab}",
+                    arguments = listOf(navArgument("tab") { type = NavType.StringType; defaultValue = "Downloads" })
+                ) { backStackEntry ->
+                    val tab = backStackEntry.arguments?.getString("tab") ?: "Downloads"
+                    com.streamlux.app.ui.screens.library.LibraryScreen(
+                        onNavigateToDetail = { id, type -> navController.navigate("detail/$type/$id") },
+                        onNavigateToPlayer = { id, type, s, e, title, poster ->
+                            val safeTitle = android.net.Uri.encode(title)
+                            val safePoster = android.net.Uri.encode(poster.ifEmpty { "null" })
+                            navController.navigate("player/$type/$id?season=$s&episode=$e&title=$safeTitle&poster=$safePoster")
+                        },
+                        initialTab = tab
+                    )
+                }
+
+                composable(Screen.Auth.route) {
+                    com.streamlux.app.ui.screens.auth.AuthScreen(
+                        onAuthSuccess = { 
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        onNavigateToProfileSetup = { navController.navigate(Screen.ProfileSetup.route) },
+                        onSkip = { 
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+                
+                composable(Screen.ProfileSetup.route) {
+                    com.streamlux.app.ui.screens.profile.ProfileSetupScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onSetupComplete = {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable(Screen.Search.route) {
+                    com.streamlux.app.ui.screens.search.SearchScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToDetail = { id, type -> navController.navigate("detail/$type/$id") }
+                    )
+                }
+
+                composable(Screen.Copyright.route) {
+                    com.streamlux.app.ui.screens.legal.CopyrightScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("ownership") {
+                    com.streamlux.app.ui.screens.legal.CopyrightScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.Disclaimer.route) {
+                    com.streamlux.app.ui.screens.legal.DisclaimerScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("mission") {
+                    com.streamlux.app.ui.screens.legal.MissionScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("security") {
+                    com.streamlux.app.ui.screens.legal.SecurityScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("privacy") {
+                    com.streamlux.app.ui.screens.legal.PrivacyScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("terms") {
+                    com.streamlux.app.ui.screens.legal.TermsScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("danger_zone") {
+                    com.streamlux.app.ui.screens.profile.DangerZoneScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("detail/{type}/{id}") {
+                    MediaDetailScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToPlayer = { route ->
+                            navController.navigate(route)
+                        },
+                        onNavigateToDetail = { id, type -> navController.navigate("detail/$type/$id") },
+                        onNavigateToAuth = { navController.navigate(Screen.Auth.route) }
+                    )
+                }
+
+                composable(
+                    route = "collection/{id}",
+                    arguments = listOf(navArgument("id") { type = NavType.IntType })
+                ) { backStackEntry ->
+                    val collectionId = backStackEntry.arguments?.getInt("id") ?: return@composable
+                    com.streamlux.app.ui.screens.collection.CollectionScreen(
+                        collectionId = collectionId,
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToDetail = { id, type -> navController.navigate("detail/$type/$id") }
+                    )
+                }
+
+                composable(
+                    route = "player/{type}/{id}?season={season}&episode={episode}&title={title}&poster={poster}",
+                    arguments = listOf(
+                        navArgument("type") { type = NavType.StringType },
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("season") { type = NavType.IntType; defaultValue = 1 },
+                        navArgument("episode") { type = NavType.IntType; defaultValue = 1 },
+                        navArgument("title") { type = NavType.StringType; defaultValue = "Unknown" },
+                        navArgument("poster") { type = NavType.StringType; defaultValue = "" }
+                    )
+                ) {
+                    com.streamlux.app.ui.screens.player.VideoPlayerScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+            }
+        }
+    }
+}
