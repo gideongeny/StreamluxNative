@@ -57,7 +57,14 @@ fun ProfileScreen(
     val defaultServerIndex by viewModel.defaultServerIndex.collectAsState()
     var showServerDialog by remember { mutableStateOf(false) }
     
-    val serverNames = listOf("VidEasy (Primary)", "VidSrc.me (Fallback 1)", "VidSrc.to (Fallback 2)", "SuperEmbed (Fallback 3)")
+    // Settings picks default startup server only — full fallback list stays in the player.
+    val serverOptions = listOf(
+        0 to "VidKing (Primary)",
+        1 to "VidEasy",
+        2 to "VidSrc.me",
+        3 to "VidSrc.to",
+        15 to "SuperEmbed"
+    )
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -124,7 +131,11 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text("Default Video Server", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text(serverNames.getOrNull(defaultServerIndex) ?: "VidEasy (Primary)", color = PrimaryOrange, fontSize = 12.sp)
+                            Text(
+                                serverOptions.find { it.first == defaultServerIndex }?.second ?: "VidKing (Primary)",
+                                color = PrimaryOrange,
+                                fontSize = 12.sp
+                            )
                         }
                     }
                     Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
@@ -209,24 +220,24 @@ fun ProfileScreen(
             title = { Text("Select Default Video Server") },
             text = {
                 Column {
-                    serverNames.forEachIndexed { index, name ->
+                    serverOptions.forEach { (playerIndex, name) ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth().clickable {
-                                viewModel.setDefaultServer(index)
+                                viewModel.setDefaultServer(playerIndex)
                                 showServerDialog = false
                             }.padding(vertical = 12.dp)
                         ) {
                             RadioButton(
-                                selected = defaultServerIndex == index,
+                                selected = defaultServerIndex == playerIndex,
                                 onClick = {
-                                    viewModel.setDefaultServer(index)
+                                    viewModel.setDefaultServer(playerIndex)
                                     showServerDialog = false
                                 },
                                 colors = RadioButtonDefaults.colors(selectedColor = PrimaryOrange)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(name, color = if (defaultServerIndex == index) PrimaryOrange else Color.White)
+                            Text(name, color = if (defaultServerIndex == playerIndex) PrimaryOrange else Color.White)
                         }
                     }
                 }

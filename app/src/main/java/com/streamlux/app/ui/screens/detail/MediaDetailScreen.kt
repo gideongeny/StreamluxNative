@@ -158,9 +158,17 @@ fun DetailActions(
                             "https://dl.vidsrc.vip/tv/${viewModel.mediaId}"
                         else
                             "https://dl.vidsrc.vip/movie/${viewModel.mediaId}"
-                        val activity = context.findActivity()
-                        if (activity != null) AdManager.showRewardedAd(activity) { onShowPortal(url) }
-                        else onShowPortal(url)
+                        try {
+                            val activity = context.findActivity()
+                            if (activity != null) {
+                                AdManager.showRewardedAd(activity) { onShowPortal(url) }
+                            } else {
+                                onShowPortal(url)
+                            }
+                        } catch (ex: Exception) {
+                            Log.e("DetailActions", "Download ad gate failed: ${ex.message}")
+                            onShowPortal(url)
+                        }
                     } else {
                         Toast.makeText(context, "Already downloaded", Toast.LENGTH_SHORT).show()
                     }
@@ -397,9 +405,17 @@ fun SeasonAndEpisodes(
                             onClick = {
                                 if (episodeStatus?.downloadStatus != "completed") {
                                     val url = "https://dl.vidsrc.vip/tv/${viewModel.mediaId}/$selectedSeason/${ep.episodeNumber}"
-                                    val activity = context.findActivity()
-                                    if (activity != null) AdManager.showRewardedAd(activity) { onShowPortal(url) }
-                                    else onShowPortal(url)
+                                    try {
+                                        val activity = context.findActivity()
+                                        if (activity != null) {
+                                            AdManager.showRewardedAd(activity) { onShowPortal(url) }
+                                        } else {
+                                            onShowPortal(url)
+                                        }
+                                    } catch (ex: Exception) {
+                                        Log.e("SeasonEpisodes", "Download ad gate failed: ${ex.message}")
+                                        onShowPortal(url)
+                                    }
                                 }
                             }
                         ) {
@@ -465,16 +481,12 @@ fun MediaDetailScreen(
     val item = filmInfo!!.detail
     var commentText by remember { mutableStateOf("") }
     var showDownloadDialog by remember { mutableStateOf(false) }
-    var showVidVaultWebView by remember { mutableStateOf(false) }
     var portalUrl by remember { mutableStateOf("") }
     var downloadSeason by remember { mutableStateOf<Int?>(null) }
     var downloadEpisode by remember { mutableStateOf<Int?>(null) }
 
-    BackHandler(enabled = showDownloadDialog || showVidVaultWebView) {
-        when {
-            showVidVaultWebView -> showVidVaultWebView = false
-            showDownloadDialog -> showDownloadDialog = false
-        }
+    BackHandler(enabled = showDownloadDialog) {
+        showDownloadDialog = false
     }
 
     var dominantColor by remember { mutableStateOf<Color?>(null) }
@@ -707,38 +719,21 @@ fun MediaDetailScreen(
                 episodeStillPath = epItem?.stillPath,
                 onClose = { showDownloadDialog = false },
                 onOpenVidVault = {
-                    viewModel.registerDownloadIntent(s, e, epItem?.name, epItem?.stillPath)
-                    showDownloadDialog = false
-                    showVidVaultWebView = true
+                    try {
+                        viewModel.registerDownloadIntent(s, e, epItem?.name, epItem?.stillPath)
+                        showDownloadDialog = false
+                        val vaultUrl = com.streamlux.app.utils.VidVaultUrlBuilder.build(
+                            mediaType = viewModel.mediaType,
+                            tmdbId = viewModel.mediaId,
+                            season = s,
+                            episode = e
+                        )
+                        com.streamlux.app.utils.VidVaultLauncher.open(context, vaultUrl, item.displayTitle)
+                    } catch (ex: Exception) {
+                        Log.e("MediaDetail", "VidVault open failed: ${ex.message}")
+                        Toast.makeText(context, "Could not open VidVault. Please try again.", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            )
-        }
-
-        if (showVidVaultWebView) {
-            val epItem = if (downloadSeason != null && downloadEpisode != null) {
-                seasonEpisodes.find { it.episodeNumber == downloadEpisode }
-            } else null
-
-            com.streamlux.app.ui.components.VidVaultWebViewOverlay(
-                url = com.streamlux.app.utils.VidVaultUrlBuilder.build(
-                    mediaType = viewModel.mediaType,
-                    tmdbId = viewModel.mediaId,
-                    season = downloadSeason,
-                    episode = downloadEpisode
-                ),
-                tmdbId = viewModel.mediaId,
-                title = item.displayTitle,
-                onDownloadStarted = { systemDownloadId ->
-                    viewModel.onDownloadStarted(
-                        systemDownloadId = systemDownloadId,
-                        quality = "VidVault",
-                        season = downloadSeason,
-                        episode = downloadEpisode,
-                        episodeName = epItem?.name,
-                        episodeStillPath = epItem?.stillPath
-                    )
-                },
-                onClose = { showVidVaultWebView = false }
             )
         }
     }
@@ -840,7 +835,9 @@ fun VylaDownloadDialog(
             Column(
                 modifier = Modifier
                     .padding(24.dp)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(max = 520.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header
@@ -932,25 +929,12 @@ fun VylaDownloadDialog(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Your library entry is still saved. Try the VidVault portal inside the app.",
+                            text = "Your library entry is still saved. Use Option 2 below.",
                             color = Color.DarkGray,
                             textAlign = TextAlign.Center,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = onOpenVidVault,
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryOrange),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = "Option 2 — Open VidVault Portal",
-                                color = Color.Black,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 12.sp
-                            )
-                        }
                     }
                 } else {
                     androidx.compose.foundation.lazy.LazyColumn(
@@ -1057,30 +1041,31 @@ fun VylaDownloadDialog(
                         }
                     }
 
-                    if (!isLoading && error == null && links.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                        Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (!isLoading) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "OPTION 2 — VIDVAULT PORTAL",
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onOpenVidVault,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryOrange.copy(alpha = 0.5f))
+                    ) {
                         Text(
-                            text = "OPTION 2 — VIDVAULT PORTAL",
-                            color = Color.Gray,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.sp
+                            text = "Open VidVault",
+                            color = PrimaryOrange,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onOpenVidVault,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryOrange.copy(alpha = 0.5f))
-                        ) {
-                            Text(
-                                text = "Open VidVault in App",
-                                color = PrimaryOrange,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
                     }
                 }
             }

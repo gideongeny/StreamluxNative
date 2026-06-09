@@ -163,12 +163,9 @@ class VideoPlayerViewModel @Inject constructor(
             )
             _serverList.value = servers
             
-            val defaultIndex = settingsManager.defaultServerIndex
-            if (defaultIndex in servers.indices) {
-                _currentServer.value = servers[defaultIndex]
-            } else {
-                _currentServer.value = servers[0]
-            }
+            val savedIndex = settingsManager.defaultServerIndex
+            val defaultIndex = if (savedIndex in servers.indices) savedIndex else 0
+            _currentServer.value = servers[defaultIndex]
         } else if (mediaType == "youtube" || mediaType == "trailer") {
             val server = ServerSource("Trailer", urlFactory.create(mediaId, season, episode, mediaType, "YOUTUBE"))
             _serverList.value = listOf(server)
