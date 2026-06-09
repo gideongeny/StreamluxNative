@@ -144,10 +144,22 @@ class VideoPlayerViewModel @Inject constructor(
     fun generateSources() {
         if (mediaType == "movie" || mediaType == "tv") {
             val servers = listOf(
-                ServerSource("VidEasy (Primary)", urlFactory.create(mediaId, season, episode, mediaType, "VIDEASY")),
-                ServerSource("VidSrc.me (Fallback 1)", urlFactory.create(mediaId, season, episode, mediaType, "VIDSRC_ME")),
-                ServerSource("VidSrc.to (Fallback 2)", urlFactory.create(mediaId, season, episode, mediaType, "VIDSRC_TO")),
-                ServerSource("SuperEmbed (Fallback 3)", urlFactory.create(mediaId, season, episode, mediaType, "SUPEREMBED"))
+                ServerSource("VidKing", urlFactory.create(mediaId, season, episode, mediaType, "VIDKING")),
+                ServerSource("VidEasy", urlFactory.create(mediaId, season, episode, mediaType, "VIDEASY")),
+                ServerSource("VidSrc.me", urlFactory.create(mediaId, season, episode, mediaType, "VIDSRC_ME")),
+                ServerSource("VidSrc.to", urlFactory.create(mediaId, season, episode, mediaType, "VIDSRC_TO")),
+                ServerSource("VidNest", urlFactory.create(mediaId, season, episode, mediaType, "VIDNEST")),
+                ServerSource("TouStream", urlFactory.create(mediaId, season, episode, mediaType, "TOUSTREAM")),
+                ServerSource("VidLink", urlFactory.create(mediaId, season, episode, mediaType, "VIDLINK")),
+                ServerSource("VidFast", urlFactory.create(mediaId, season, episode, mediaType, "VIDFAST")),
+                ServerSource("AutoEmbed", urlFactory.create(mediaId, season, episode, mediaType, "AUTOEMBED")),
+                ServerSource("MovieAPI", urlFactory.create(mediaId, season, episode, mediaType, "MOVIEAPI")),
+                ServerSource("SmashyStream", urlFactory.create(mediaId, season, episode, mediaType, "SMASHYSTREAM")),
+                ServerSource("AnimeHub", urlFactory.create(mediaId, season, episode, mediaType, "ANIMEHUB")),
+                ServerSource("Fsonic", urlFactory.create(mediaId, season, episode, mediaType, "FSONIC")),
+                ServerSource("Miruro", urlFactory.create(mediaId, season, episode, mediaType, "MIRURO")),
+                ServerSource("MeowTV", urlFactory.create(mediaId, season, episode, mediaType, "MEOWTV")),
+                ServerSource("SuperEmbed", urlFactory.create(mediaId, season, episode, mediaType, "SUPEREMBED"))
             )
             _serverList.value = servers
             

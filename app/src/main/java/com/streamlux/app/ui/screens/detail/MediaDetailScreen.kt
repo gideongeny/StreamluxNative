@@ -464,15 +464,16 @@ fun MediaDetailScreen(
 
     val item = filmInfo!!.detail
     var commentText by remember { mutableStateOf("") }
-    var showVidVault by remember { mutableStateOf(false) }
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var showVidVaultWebView by remember { mutableStateOf(false) }
     var portalUrl by remember { mutableStateOf("") }
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var downloadSeason by remember { mutableStateOf<Int?>(null) }
+    var downloadEpisode by remember { mutableStateOf<Int?>(null) }
 
-    BackHandler(enabled = showVidVault) {
-        if (webViewRef?.canGoBack() == true) {
-            webViewRef?.goBack()
-        } else {
-            showVidVault = false
+    BackHandler(enabled = showDownloadDialog || showVidVaultWebView) {
+        when {
+            showVidVaultWebView -> showVidVaultWebView = false
+            showDownloadDialog -> showDownloadDialog = false
         }
     }
 
@@ -582,7 +583,7 @@ fun MediaDetailScreen(
                         viewModel = viewModel, item = item, isAvailableOffline = isAvailableOffline,
                         downloadedItem = downloadedItem, isBookmarked = isBookmarked,
                         onNavigateToPlayer = onNavigateToPlayer,
-                        onShowPortal = { url -> portalUrl = url; showVidVault = true },
+                        onShowPortal = { url -> portalUrl = url; showDownloadDialog = true },
                         selectedSeason = selectedSeason
                     )
 
@@ -598,7 +599,7 @@ fun MediaDetailScreen(
                             viewModel = viewModel, item = item, selectedSeason = selectedSeason,
                             seasonEpisodes = seasonEpisodes, downloadedEpisodes = downloadedEpisodes,
                             onNavigateToPlayer = onNavigateToPlayer,
-                            onShowPortal = { url -> portalUrl = url; showVidVault = true }
+                            onShowPortal = { url -> portalUrl = url; showDownloadDialog = true }
                         )
                     }
 
@@ -652,7 +653,7 @@ fun MediaDetailScreen(
                         viewModel = viewModel, item = item, isAvailableOffline = isAvailableOffline,
                         downloadedItem = downloadedItem, isBookmarked = isBookmarked,
                         onNavigateToPlayer = onNavigateToPlayer,
-                        onShowPortal = { url -> portalUrl = url; showVidVault = true },
+                        onShowPortal = { url -> portalUrl = url; showDownloadDialog = true },
                         selectedSeason = selectedSeason
                     )
                     Spacer(modifier = Modifier.height(24.dp))
@@ -667,7 +668,7 @@ fun MediaDetailScreen(
                             viewModel = viewModel, item = item, selectedSeason = selectedSeason,
                             seasonEpisodes = seasonEpisodes, downloadedEpisodes = downloadedEpisodes,
                             onNavigateToPlayer = onNavigateToPlayer,
-                            onShowPortal = { url -> portalUrl = url; showVidVault = true }
+                            onShowPortal = { url -> portalUrl = url; showDownloadDialog = true }
                         )
                     }
 
@@ -685,15 +686,15 @@ fun MediaDetailScreen(
             Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
         }
 
-        if (showVidVault) {
-            val uri = Uri.parse(portalUrl)
+        if (showDownloadDialog) {
+            val uri = try { Uri.parse(portalUrl) } catch (_: Exception) { Uri.EMPTY }
             val pathSegments = uri.pathSegments
-            
-            // Format for episode: tv/{mediaId}/{season}/{episode}
             val isTv = portalUrl.contains("/tv/")
             val s = if (isTv && pathSegments.size >= 4) pathSegments[2].toIntOrNull() else null
             val e = if (isTv && pathSegments.size >= 4) pathSegments[3].toIntOrNull() else null
-            
+            downloadSeason = s
+            downloadEpisode = e
+
             val epItem = if (s != null && e != null) {
                 seasonEpisodes.find { it.episodeNumber == e }
             } else null
@@ -704,7 +705,40 @@ fun MediaDetailScreen(
                 episode = e,
                 episodeName = epItem?.name,
                 episodeStillPath = epItem?.stillPath,
-                onClose = { showVidVault = false }
+                onClose = { showDownloadDialog = false },
+                onOpenVidVault = {
+                    viewModel.registerDownloadIntent(s, e, epItem?.name, epItem?.stillPath)
+                    showDownloadDialog = false
+                    showVidVaultWebView = true
+                }
+            )
+        }
+
+        if (showVidVaultWebView) {
+            val epItem = if (downloadSeason != null && downloadEpisode != null) {
+                seasonEpisodes.find { it.episodeNumber == downloadEpisode }
+            } else null
+
+            com.streamlux.app.ui.components.VidVaultWebViewOverlay(
+                url = com.streamlux.app.utils.VidVaultUrlBuilder.build(
+                    mediaType = viewModel.mediaType,
+                    tmdbId = viewModel.mediaId,
+                    season = downloadSeason,
+                    episode = downloadEpisode
+                ),
+                tmdbId = viewModel.mediaId,
+                title = item.displayTitle,
+                onDownloadStarted = { systemDownloadId ->
+                    viewModel.onDownloadStarted(
+                        systemDownloadId = systemDownloadId,
+                        quality = "VidVault",
+                        season = downloadSeason,
+                        episode = downloadEpisode,
+                        episodeName = epItem?.name,
+                        episodeStillPath = epItem?.stillPath
+                    )
+                },
+                onClose = { showVidVaultWebView = false }
             )
         }
     }
@@ -770,7 +804,8 @@ fun VylaDownloadDialog(
     episode: Int?,
     episodeName: String?,
     episodeStillPath: String?,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onOpenVidVault: () -> Unit
 ) {
     val context = LocalContext.current
     val links by viewModel.downloadLinks.collectAsState()
@@ -778,7 +813,12 @@ fun VylaDownloadDialog(
     val error by viewModel.vylaError.collectAsState()
 
     androidx.compose.runtime.LaunchedEffect(season, episode) {
-        viewModel.fetchDownloadLinks(season, episode)
+        try {
+            viewModel.registerDownloadIntent(season, episode, episodeName, episodeStillPath)
+            viewModel.fetchDownloadLinks(season, episode)
+        } catch (e: Exception) {
+            Log.e("VylaDownloadDialog", "Failed to load download links: ${e.message}")
+        }
     }
 
     Box(
@@ -811,7 +851,7 @@ fun VylaDownloadDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "⚡ DIRECT SELECTION",
+                            text = "OPTION 1 — DIRECT CDN",
                             color = PrimaryOrange,
                             fontWeight = FontWeight.Black,
                             fontSize = 15.sp,
@@ -869,7 +909,7 @@ fun VylaDownloadDialog(
                             fontSize = 13.sp
                         )
                     }
-                } else if (error != null) {
+                } else if (error != null || links.isEmpty()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -877,40 +917,40 @@ fun VylaDownloadDialog(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Error",
-                            tint = Color.Red,
+                            imageVector = if (error != null) Icons.Default.Warning else Icons.Default.Info,
+                            contentDescription = "Status",
+                            tint = if (error != null) Color.Red else Color.Gray,
                             modifier = Modifier.size(40.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = error ?: "Unknown error",
+                            text = error ?: "No direct download channels found for this title.",
                             color = Color.Gray,
                             textAlign = TextAlign.Center,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
-                    }
-                } else if (links.isEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Info",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(40.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "No direct download channels found.",
-                            color = Color.Gray,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 13.sp
+                            text = "Your library entry is still saved. Try the VidVault portal inside the app.",
+                            color = Color.DarkGray,
+                            textAlign = TextAlign.Center,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = onOpenVidVault,
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryOrange),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "Option 2 — Open VidVault Portal",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 } else {
                     androidx.compose.foundation.lazy.LazyColumn(
@@ -1014,6 +1054,32 @@ fun VylaDownloadDialog(
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    if (!isLoading && error == null && links.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "OPTION 2 — VIDVAULT PORTAL",
+                            color = Color.Gray,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onOpenVidVault,
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryOrange.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = "Open VidVault in App",
+                                color = PrimaryOrange,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }

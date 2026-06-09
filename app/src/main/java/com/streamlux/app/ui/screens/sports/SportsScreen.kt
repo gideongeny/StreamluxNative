@@ -52,7 +52,9 @@ fun SportsScreen(
     val uriHandler = LocalUriHandler.current
 
     fun openArena(fixture: SportsFixture) {
-        onNavigateToPlayer("sports", fixture.id)
+        val arenaUrl = "https://streamlux.vercel.app/sports/arena/${fixture.id}"
+        val encodedUrl = java.net.URLEncoder.encode(arenaUrl, "UTF-8")
+        onNavigateToPlayer("live", encodedUrl)
     }
 
     Scaffold(
@@ -144,7 +146,7 @@ fun SportsScreen(
                         Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             HighlightCard(highlight) {
                                 viewModel.getHighlightUrl(highlight)?.let { url ->
-                                    onNavigateToPlayer("sports", java.net.URLEncoder.encode(url, "UTF-8"))
+                                    onNavigateToPlayer("live", java.net.URLEncoder.encode(url, "UTF-8"))
                                 }
                             }
                         }

@@ -266,6 +266,54 @@ class MediaDetailViewModel @Inject constructor(
         }
     }
 
+    /** Keeps the title in the local library even when CDN links are unavailable. */
+    fun registerDownloadIntent(
+        season: Int? = null,
+        episode: Int? = null,
+        episodeName: String? = null,
+        episodeStillPath: String? = null
+    ) {
+        val info = _filmInfo.value?.detail ?: return
+        viewModelScope.launch {
+            try {
+                val uniqueId = if (mediaType == "tv" && season != null && episode != null) {
+                    "${mediaId}_s${season}_e${episode}"
+                } else {
+                    mediaId
+                }
+
+                val existing = libraryDao.getItemByMediaId(uniqueId)
+                if (existing?.downloadStatus == "completed") return@launch
+
+                libraryDao.insertItem(
+                    com.streamlux.app.data.local.LibraryEntity(
+                        id = uniqueId,
+                        mediaId = mediaId,
+                        mediaType = mediaType,
+                        title = if (mediaType == "tv" && season != null && episode != null) {
+                            "${info.displayTitle} S${season} E${episode}"
+                        } else {
+                            info.displayTitle
+                        },
+                        posterPath = info.posterPath,
+                        isDownload = true,
+                        downloadStatus = "pending",
+                        downloadProgress = 0,
+                        parentId = if (mediaType == "tv") mediaId else null,
+                        seriesTitle = if (mediaType == "tv") info.displayTitle else null,
+                        seasonNumber = season,
+                        episodeNumber = episode,
+                        episodeName = episodeName,
+                        episodeStillPath = episodeStillPath,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+            } catch (e: Exception) {
+                Log.e("MediaDetailVM", "Failed to register download intent: ${e.message}")
+            }
+        }
+    }
+
     /** Called when the user starts a download from the WebView portal */
     fun onDownloadStarted(
         systemDownloadId: Long, 

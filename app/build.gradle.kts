@@ -22,8 +22,8 @@ android {
         applicationId = "com.streamlux.app.mobile"
         minSdk = 24
         targetSdk = 35
-        versionCode = 268
-        versionName = "2.6.8"
+        versionCode = 270
+        versionName = "2.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
